@@ -1,0 +1,22 @@
+@import "tailwindcss";
+
+:root {
+  color-scheme: light;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  min-width: 320px;
+}
+
+::selection {
+  background: #ddd8ff;
+  color: #312e81;
+}
+
+summary::-webkit-details-marker {
+  display: none;
+}
