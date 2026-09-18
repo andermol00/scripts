@@ -1,26 +1,49 @@
+# Render.com Blueprint para Tampermonkey Vault
+# ------------------------------------------------
+# Este archivo le indica a Render que la app es un servicio web de Node.js
+# (no Ruby) y cómo construirla y arrancarla. Si Render detectó "Ruby" y
+# falló con "Could not locate Gemfile", este blueprint lo soluciona.
+#
+# Cómo usarlo:
+#   1. Sube este archivo (y todo el repo) a GitHub.
+#   2. En Render: New + -> "Blueprint" -> conecta este repositorio.
+#   3. Render leerá este render.yaml y creará el servicio web + la base de datos.
+#   4. Configura las variables de entorno del bloque `envVars` marcadas como
+#      sync:false (las credenciales de admin) en el panel de Render.
+#
+# Genera las credenciales con:   node scripts/setup-admin.mjs
+
 services:
   - type: web
-    name: script-vault
+    name: tampermonkey-vault
     runtime: node
     plan: free
-    buildCommand: npm ci && npx drizzle-kit push && npm run build
+    buildCommand: npm install --include=dev && npx drizzle-kit push --force && npm run build
     startCommand: npm run start
     healthCheckPath: /api/health
     autoDeploy: true
     envVars:
       - key: NODE_VERSION
         value: "22"
+      - key: NODE_ENV
+        value: production
+      # La base de datos se enlaza automáticamente desde el bloque `databases`.
       - key: DATABASE_URL
         fromDatabase:
-          name: script-vault-db
+          name: tampermonkey-vault-db
           property: connectionString
+      # ---- Credenciales de administrador (NO las subas al repo) ----
+      # Genera sus valores con: node scripts/setup-admin.mjs
+      # y pégalos en el panel de Render (Environment).
+      - key: ADMIN_USERNAME
+        sync: false
+      - key: ADMIN_PASSWORD_HASH
+        sync: false
+      - key: ADMIN_TOTP_SECRET
+        sync: false
       - key: AUTH_SECRET
-        generateValue: true
-      - key: REGISTRATION_SECRET
-        generateValue: true
+        sync: false
 
 databases:
-  - name: script-vault-db
-    plan: basic-256mb
-    databaseName: script_vault
-    user: script_vault
+  - name: tampermonkey-vault-db
+    plan: free

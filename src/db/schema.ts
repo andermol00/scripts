@@ -1,77 +1,52 @@
 import {
   boolean,
   index,
+  integer,
+  jsonb,
   pgTable,
+  serial,
   text,
   timestamp,
-  uuid,
-  varchar,
 } from "drizzle-orm/pg-core";
 
-export const users = pgTable(
-  "users",
+// Userscripts saved by the admin.
+export const scripts = pgTable("scripts", {
+  id: serial("id").primaryKey(),
+  name: text("name").notNull(),
+  description: text("description").notNull().default(""),
+  code: text("code").notNull(),
+  namespace: text("namespace").notNull().default("https://tampermonkey.local/"),
+  version: text("version").notNull().default("1.0.0"),
+  author: text("author").notNull().default(""),
+  matches: jsonb("matches").$type<string[]>().notNull().default([]),
+  grants: jsonb("grants").$type<string[]>().notNull().default([]),
+  runAt: text("run_at").notNull().default("document-idle"),
+  updateUrl: text("update_url").notNull().default(""),
+  downloadUrl: text("download_url").notNull().default(""),
+  obfuscateByDefault: boolean("obfuscate_by_default").notNull().default(false),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+// Persisted brute-force protection: tracks failed login attempts per
+// identifier (hashed IP + username) so lockouts survive server restarts.
+export const loginAttempts = pgTable(
+  "login_attempts",
   {
-    id: uuid("id").defaultRandom().primaryKey(),
-    email: varchar("email", { length: 254 }).notNull().unique(),
-    displayName: varchar("display_name", { length: 80 }).notNull(),
-    passwordHash: varchar("password_hash", { length: 128 }).notNull(),
-    passwordSalt: varchar("password_salt", { length: 128 }).notNull(),
-    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
-    lastLoginAt: timestamp("last_login_at", { withTimezone: true }),
+    id: serial("id").primaryKey(),
+    identifier: text("identifier").notNull(),
+    attempts: integer("attempts").notNull().default(0),
+    lastAttemptAt: timestamp("last_attempt_at", { withTimezone: true }).notNull().defaultNow(),
+    lockedUntil: timestamp("locked_until", { withTimezone: true }),
   },
-  (table) => [index("users_email_idx").on(table.email)],
+  (table) => [index("login_attempts_identifier_idx").on(table.identifier)],
 );
 
-export const userSessions = pgTable(
-  "user_sessions",
-  {
-    id: uuid("id").primaryKey(),
-    userId: uuid("user_id")
-      .notNull()
-      .references(() => users.id, { onDelete: "cascade" }),
-    tokenHash: varchar("token_hash", { length: 128 }).notNull().unique(),
-    userAgent: varchar("user_agent", { length: 500 }),
-    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
-    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
-    lastSeenAt: timestamp("last_seen_at", { withTimezone: true }).defaultNow().notNull(),
-  },
-  (table) => [
-    index("user_sessions_user_idx").on(table.userId),
-    index("user_sessions_expiry_idx").on(table.expiresAt),
-  ],
-);
-
-export const savedScripts = pgTable(
-  "saved_scripts",
-  {
-    id: uuid("id").defaultRandom().primaryKey(),
-    ownerId: uuid("owner_id")
-      .notNull()
-      .references(() => users.id, { onDelete: "cascade" }),
-    title: varchar("title", { length: 100 }).notNull(),
-    description: varchar("description", { length: 300 }).notNull().default(""),
-    sourceCode: text("source_code").notNull(),
-    outputCode: text("output_code").notNull(),
-    isObfuscated: boolean("is_obfuscated").notNull().default(true),
-    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
-    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
-  },
-  (table) => [
-    index("saved_scripts_owner_updated_idx").on(table.ownerId, table.updatedAt),
-  ],
-);
-
-export const authEvents = pgTable(
-  "auth_events",
-  {
-    id: uuid("id").defaultRandom().primaryKey(),
-    principalHash: varchar("principal_hash", { length: 128 }).notNull(),
-    ipHash: varchar("ip_hash", { length: 128 }).notNull(),
-    eventType: varchar("event_type", { length: 32 }).notNull(),
-    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
-  },
-  (table) => [
-    index("auth_events_principal_created_idx").on(table.principalHash, table.createdAt),
-    index("auth_events_ip_created_idx").on(table.ipHash, table.createdAt),
-  ],
-);
+// Audit trail of successful and failed login attempts for visibility.
+export const loginEvents = pgTable("login_events", {
+  id: serial("id").primaryKey(),
+  identifier: text("identifier").notNull(),
+  success: boolean("success").notNull(),
+  reason: text("reason").notNull().default(""),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
