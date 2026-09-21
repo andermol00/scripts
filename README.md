@@ -36,6 +36,8 @@ Abre http://localhost:3000, crea la cuenta de administrador y empieza a guardar 
 
 ## Desplegar en Render.com desde GitHub
 
+### Opción A — Blueprint (recomendada)
+
 1. Sube este repositorio a GitHub.
 2. En Render, elige **New +** → **Blueprint** y apunta a tu repo.
 3. Render leerá `render.yaml`: crea la base de datos PostgreSQL, genera
@@ -44,12 +46,49 @@ Abre http://localhost:3000, crea la cuenta de administrador y empieza a guardar 
 
 > El healthcheck de Render usa `/api/health`.
 
-Si prefieres configurarlo a mano, crea un servicio Web con:
+### Opción B — Web Service manual
 
-- **Build**: `npm install && npm run build`
-- **Start**: `npm run start`
-- Variables: `DATABASE_URL`, `SESSION_SECRET`, `NODE_ENV=production`
-- Tras conectar la base de datos, ejecuta `npx drizzle-kit push` una vez.
+Crea un **Web Service** apuntando a tu repo y usa los comandos por defecto de
+Node (`yarn install` / `yarn build` / `yarn start`) o bien:
+
+- **Build Command**: `npm install && npm run build`
+- **Start Command**: `npm run start`
+- **Health Check Path**: `/api/health`
+- **Environment Variables**:
+  - `DATABASE_URL` → *Internal Connection String* de tu base PostgreSQL en Render
+  - `SESSION_SECRET` → una cadena larga y aleatoria (**obligatoria en producción**)
+  - `NODE_ENV` → `production`
+
+### La base de datos se crea sola
+
+`src/instrumentation.ts` se ejecuta al arrancar el servidor y crea las tablas
+si no existen (`CREATE TABLE IF NOT EXISTS`, idempotente). **No hace falta
+ejecutar `drizzle-kit push` a mano** contra la base de Render.
+
+## Solución de problemas del deploy
+
+**`Module not found: Can't resolve 'jose'`**
+La dependencia `jose` debe estar declarada en `package.json` (ya lo está, en
+`dependencies`). Si clonaste o copiaste archivos a mano, vuelve a copiar el
+`package.json` del repo y haz commit antes de redesplegar:
+
+```bash
+npm install        # o yarn install
+git add package.json package-lock.json yarn.lock
+git commit -m "chore: declare jose dependency"
+git push
+```
+
+**`info No lockfile found`** en Render → el repo no tiene `yarn.lock` ni
+`package-lock.json`. Añádelo y súbelo para builds reproducibles:
+
+```bash
+yarn install && git add yarn.lock && git commit -m "chore: lockfile" && git push
+```
+
+**La app arranca pero el login da error 500** → revisa que `DATABASE_URL` y
+`SESSION_SECRET` estén definidas en el panel de Render y que la base esté
+enlazada al servicio. Revisa los **Logs** buscando `[db] bootstrap`.
 
 ## Stack
 
