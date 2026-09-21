@@ -1,9 +1,8 @@
-import { NextResponse } from "next/server";
-import { clearSessionCookie } from "@/lib/session";
+import { destroySession } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 
 export async function POST() {
-  await clearSessionCookie();
-  return NextResponse.json({ ok: true });
+  await destroySession();
+  return Response.json({ ok: true });
 }

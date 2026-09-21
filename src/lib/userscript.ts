@@ -1,49 +1,56 @@
-export type ScriptRecord = {
-  name: string;
-  description: string;
-  code: string;
-  namespace: string;
-  version: string;
-  author: string;
-  matches: string[];
-  grants: string[];
-  runAt: string;
-  updateUrl: string;
-  downloadUrl: string;
-};
+import type { Script } from "@/db/schema";
+import { obfuscateCode } from "./obfuscate";
 
-import { obfuscateCode, type ObfuscationLevel } from "./obfuscate";
-
-function metaLine(tag: string, value: string) {
-  return `// @${tag.padEnd(12, " ")} ${value}`;
+function parseList(json: string): string[] {
+  try {
+    const v = JSON.parse(json);
+    return Array.isArray(v) ? v.filter((x) => typeof x === "string") : [];
+  } catch {
+    return [];
+  }
 }
 
-export function buildUserscript(script: ScriptRecord, level: ObfuscationLevel) {
+/** Build a complete Tampermonkey userscript from a stored record. */
+export function buildUserscript(script: Script): string {
+  const matches = parseList(script.matches);
+  const grants = parseList(script.grants);
+
   const lines: string[] = [];
   lines.push("// ==UserScript==");
-  lines.push(metaLine("name", script.name || "Sin nombre"));
-  if (script.namespace) lines.push(metaLine("namespace", script.namespace));
-  lines.push(metaLine("version", script.version || "1.0.0"));
-  if (script.description) lines.push(metaLine("description", script.description));
-  if (script.author) lines.push(metaLine("author", script.author));
-
-  const matches = script.matches.length > 0 ? script.matches : ["*://*/*"];
-  for (const match of matches) {
-    lines.push(metaLine("match", match));
+  lines.push(`// @name         ${script.name}`);
+  lines.push(`// @namespace    ${script.namespace}`);
+  lines.push(`// @version      ${script.version}`);
+  if (script.description) lines.push(`// @description  ${script.description}`);
+  if (script.author) lines.push(`// @author       ${script.author}`);
+  if (matches.length === 0) {
+    lines.push("// @match        *://*/*");
+  } else {
+    for (const m of matches) lines.push(`// @match        ${m}`);
   }
-
-  const grants = script.grants.length > 0 ? script.grants : ["none"];
-  for (const grant of grants) {
-    lines.push(metaLine("grant", grant));
+  if (grants.length === 0) {
+    lines.push("// @grant        none");
+  } else {
+    for (const g of grants) lines.push(`// @grant        ${g}`);
   }
-
-  if (script.runAt) lines.push(metaLine("run-at", script.runAt));
-  if (script.updateUrl) lines.push(metaLine("updateURL", script.updateUrl));
-  if (script.downloadUrl) lines.push(metaLine("downloadURL", script.downloadUrl));
+  lines.push(`// @run-at       ${script.runAt}`);
   lines.push("// ==/UserScript==");
+  lines.push("");
 
-  const header = lines.join("\n");
-  const body = obfuscateCode(script.code, level);
+  const body = script.obfuscate ? obfuscateCode(script.code) : script.code;
 
-  return `${header}\n\n${body}\n`;
+  lines.push("(function() {");
+  lines.push("    'use strict';");
+  lines.push("");
+  lines.push(indent(body, 4));
+  lines.push("})();");
+
+  return lines.join("\n");
+}
+
+function indent(text: string, spaces: number): string {
+  const pad = " ".repeat(spaces);
+  return text
+    .split("\n")
+    .map((l) => (l.length ? pad + l : l))
+    .join("\n");
 }

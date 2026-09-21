@@ -1,52 +1,78 @@
 import {
-  boolean,
-  index,
-  integer,
-  jsonb,
   pgTable,
   serial,
   text,
   timestamp,
+  boolean,
+  integer,
+  index,
 } from "drizzle-orm/pg-core";
 
-// Userscripts saved by the admin.
-export const scripts = pgTable("scripts", {
+// Single-tenant admin auth. Registration is locked after the first user
+// is created (see /api/auth/setup).
+export const users = pgTable("users", {
   id: serial("id").primaryKey(),
-  name: text("name").notNull(),
-  description: text("description").notNull().default(""),
-  code: text("code").notNull(),
-  namespace: text("namespace").notNull().default("https://tampermonkey.local/"),
-  version: text("version").notNull().default("1.0.0"),
-  author: text("author").notNull().default(""),
-  matches: jsonb("matches").$type<string[]>().notNull().default([]),
-  grants: jsonb("grants").$type<string[]>().notNull().default([]),
-  runAt: text("run_at").notNull().default("document-idle"),
-  updateUrl: text("update_url").notNull().default(""),
-  downloadUrl: text("download_url").notNull().default(""),
-  obfuscateByDefault: boolean("obfuscate_by_default").notNull().default(false),
-  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  username: text("username").notNull().unique(),
+  // Format: scrypt$N$salt$hash (all hex/base64)
+  passwordHash: text("password_hash").notNull(),
+  // Optional TOTP secret (base32) for 2FA
+  totpSecret: text("totp_secret"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 
-// Persisted brute-force protection: tracks failed login attempts per
-// identifier (hashed IP + username) so lockouts survive server restarts.
+export const sessions = pgTable(
+  "sessions",
+  {
+    id: serial("id").primaryKey(),
+    // SHA-256 of the raw session token (never store the raw token)
+    tokenHash: text("token_hash").notNull().unique(),
+    userId: integer("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    userAgent: text("user_agent"),
+    ip: text("ip"),
+    expiresAt: timestamp("expires_at").notNull(),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+  },
+  (t) => ({
+    tokenIdx: index("sessions_token_idx").on(t.tokenHash),
+  }),
+);
+
 export const loginAttempts = pgTable(
   "login_attempts",
   {
     id: serial("id").primaryKey(),
-    identifier: text("identifier").notNull(),
-    attempts: integer("attempts").notNull().default(0),
-    lastAttemptAt: timestamp("last_attempt_at", { withTimezone: true }).notNull().defaultNow(),
-    lockedUntil: timestamp("locked_until", { withTimezone: true }),
+    ip: text("ip").notNull(),
+    username: text("username"),
+    success: boolean("success").notNull().default(false),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
   },
-  (table) => [index("login_attempts_identifier_idx").on(table.identifier)],
+  (t) => ({
+    ipIdx: index("login_attempts_ip_idx").on(t.ip),
+  }),
 );
 
-// Audit trail of successful and failed login attempts for visibility.
-export const loginEvents = pgTable("login_events", {
+export const scripts = pgTable("scripts", {
   id: serial("id").primaryKey(),
-  identifier: text("identifier").notNull(),
-  success: boolean("success").notNull(),
-  reason: text("reason").notNull().default(""),
-  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  userId: integer("user_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  name: text("name").notNull(),
+  namespace: text("namespace").notNull().default("http://tampermonkey.net/"),
+  version: text("version").notNull().default("1.0.0"),
+  description: text("description").notNull().default(""),
+  author: text("author").notNull().default(""),
+  // JSON-encoded array of @match patterns
+  matches: text("matches").notNull().default("[]"),
+  // JSON-encoded array of @grant values
+  grants: text("grants").notNull().default("[]"),
+  runAt: text("run_at").notNull().default("document-idle"),
+  code: text("code").notNull().default(""),
+  obfuscate: boolean("obfuscate").notNull().default(false),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });
+
+export type User = typeof users.$inferSelect;
+export type Script = typeof scripts.$inferSelect;

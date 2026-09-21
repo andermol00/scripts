@@ -1,162 +1,171 @@
-import { createHmac, randomBytes, randomUUID, scrypt, timingSafeEqual } from "crypto";
-import { and, eq, gt } from "drizzle-orm";
+import {
+  randomBytes,
+  scryptSync,
+  timingSafeEqual,
+  createHash,
+  createHmac,
+} from "crypto";
 import { cookies, headers } from "next/headers";
 import { db } from "@/db";
-import { userSessions, users } from "@/db/schema";
+import { users, sessions, loginAttempts } from "@/db/schema";
+import { eq, and, gt, desc, sql } from "drizzle-orm";
+import type { User } from "@/db/schema";
 
-const SESSION_COOKIE = "scriptvault_session";
-const SESSION_MAX_AGE_SECONDS = 60 * 60 * 24 * 7;
-const SCRYPT_OPTIONS = {
-  N: 32768,
-  r: 8,
-  p: 1,
-  maxmem: 64 * 1024 * 1024,
-};
+const SCRYPT_N = 16384;
+const SESSION_COOKIE = "tm_session";
+const SESSION_TTL_MS = 1000 * 60 * 60 * 12; // 12h
 
-function derivePasswordKey(password: string, salt: string) {
-  return new Promise<Buffer>((resolve, reject) => {
-    scrypt(password, salt, 64, SCRYPT_OPTIONS, (error, derivedKey) => {
-      if (error) reject(error);
-      else resolve(derivedKey);
+function getSecret(): string {
+  return (
+    process.env.SESSION_SECRET ||
+    process.env.DATABASE_URL ||
+    "insecure-dev-secret-change-me"
+  );
+}
+
+/** Hash a password using scrypt with a random salt. */
+export function hashPassword(password: string): string {
+  const salt = randomBytes(16);
+  const hash = scryptSync(password, salt, 64, { N: SCRYPT_N });
+  return `scrypt$${SCRYPT_N}$${salt.toString("hex")}$${hash.toString("hex")}`;
+}
+
+/** Verify a password against a stored scrypt hash (timing-safe). */
+export function verifyPassword(password: string, stored: string): boolean {
+  try {
+    const [scheme, nStr, saltHex, hashHex] = stored.split("$");
+    if (scheme !== "scrypt") return false;
+    const salt = Buffer.from(saltHex, "hex");
+    const expected = Buffer.from(hashHex, "hex");
+    const derived = scryptSync(password, salt, expected.length, {
+      N: parseInt(nStr, 10),
     });
+    return timingSafeEqual(derived, expected);
+  } catch {
+    return false;
+  }
+}
+
+/** Create a raw session token and a stored (hashed + signed) form. */
+function makeToken(): { raw: string; hash: string } {
+  const raw = randomBytes(32).toString("hex");
+  const hash = createHash("sha256").update(raw).digest("hex");
+  return { raw, hash };
+}
+
+/** Sign the cookie value so it can't be forged without the secret. */
+function signCookie(raw: string): string {
+  const sig = createHmac("sha256", getSecret()).update(raw).digest("hex");
+  return `${raw}.${sig}`;
+}
+
+function verifyCookie(value: string): string | null {
+  const idx = value.lastIndexOf(".");
+  if (idx < 0) return null;
+  const raw = value.slice(0, idx);
+  const sig = value.slice(idx + 1);
+  const expected = createHmac("sha256", getSecret()).update(raw).digest("hex");
+  const a = Buffer.from(sig);
+  const b = Buffer.from(expected);
+  if (a.length !== b.length || !timingSafeEqual(a, b)) return null;
+  return raw;
+}
+
+export async function createSession(userId: number): Promise<void> {
+  const { raw, hash } = makeToken();
+  const expiresAt = new Date(Date.now() + SESSION_TTL_MS);
+  const hdrs = await headers();
+  await db.insert(sessions).values({
+    tokenHash: hash,
+    userId,
+    userAgent: hdrs.get("user-agent") ?? null,
+    ip: getClientIp(hdrs),
+    expiresAt,
   });
-}
-
-export type CurrentUser = {
-  id: string;
-  email: string;
-  displayName: string;
-};
-
-function appSecret() {
-  const secret = process.env.AUTH_SECRET;
-  if (!secret || secret.length < 32) {
-    throw new Error("AUTH_SECRET must contain at least 32 characters.");
-  }
-  return secret;
-}
-
-export function normalizeEmail(value: string) {
-  return value.trim().toLowerCase();
-}
-
-export function validatePassword(password: string) {
-  if (password.length < 12 || password.length > 200) {
-    return "La contraseña debe tener entre 12 y 200 caracteres.";
-  }
-  if (!/[a-z]/.test(password) || !/[A-Z]/.test(password) || !/\d/.test(password)) {
-    return "Usa mayúsculas, minúsculas y al menos un número.";
-  }
-  return null;
-}
-
-export async function hashPassword(password: string) {
-  const salt = randomBytes(24).toString("base64url");
-  const derived = await derivePasswordKey(password, salt);
-  return { salt, hash: derived.toString("hex") };
-}
-
-export async function verifyPassword(password: string, salt: string, expectedHash: string) {
-  const derived = await derivePasswordKey(password, salt);
-  const expected = Buffer.from(expectedHash, "hex");
-  return expected.length === derived.length && timingSafeEqual(expected, derived);
-}
-
-export function secureHash(value: string) {
-  return createHmac("sha256", appSecret()).update(value).digest("hex");
-}
-
-function cookieOptions() {
-  return {
+  const cookieStore = await cookies();
+  cookieStore.set(SESSION_COOKIE, signCookie(raw), {
     httpOnly: true,
     secure: process.env.NODE_ENV === "production",
-    sameSite: "strict" as const,
+    sameSite: "lax",
     path: "/",
-    maxAge: SESSION_MAX_AGE_SECONDS,
-  };
-}
-
-export async function createSession(userId: string) {
-  const sessionId = randomUUID();
-  const token = randomBytes(32).toString("base64url");
-  const rawValue = `${sessionId}.${token}`;
-  const requestHeaders = await headers();
-  const userAgent = requestHeaders.get("user-agent")?.slice(0, 500) ?? null;
-
-  await db.insert(userSessions).values({
-    id: sessionId,
-    userId,
-    tokenHash: secureHash(rawValue),
-    userAgent,
-    expiresAt: new Date(Date.now() + SESSION_MAX_AGE_SECONDS * 1000),
+    expires: expiresAt,
   });
-
-  const cookieStore = await cookies();
-  cookieStore.set(SESSION_COOKIE, rawValue, cookieOptions());
 }
 
-export async function destroySession() {
+export async function destroySession(): Promise<void> {
   const cookieStore = await cookies();
-  const rawValue = cookieStore.get(SESSION_COOKIE)?.value;
-
-  if (rawValue) {
-    await db.delete(userSessions).where(eq(userSessions.tokenHash, secureHash(rawValue)));
+  const value = cookieStore.get(SESSION_COOKIE)?.value;
+  if (value) {
+    const raw = verifyCookie(value);
+    if (raw) {
+      const hash = createHash("sha256").update(raw).digest("hex");
+      await db.delete(sessions).where(eq(sessions.tokenHash, hash));
+    }
   }
-
-  cookieStore.set(SESSION_COOKIE, "", { ...cookieOptions(), maxAge: 0 });
+  cookieStore.delete(SESSION_COOKIE);
 }
 
-export async function getCurrentUser(): Promise<CurrentUser | null> {
+export async function getCurrentUser(): Promise<User | null> {
   const cookieStore = await cookies();
-  const rawValue = cookieStore.get(SESSION_COOKIE)?.value;
-  if (!rawValue) return null;
+  const value = cookieStore.get(SESSION_COOKIE)?.value;
+  if (!value) return null;
+  const raw = verifyCookie(value);
+  if (!raw) return null;
+  const hash = createHash("sha256").update(raw).digest("hex");
+  const rows = await db
+    .select()
+    .from(sessions)
+    .where(and(eq(sessions.tokenHash, hash), gt(sessions.expiresAt, new Date())))
+    .limit(1);
+  const session = rows[0];
+  if (!session) return null;
+  const userRows = await db
+    .select()
+    .from(users)
+    .where(eq(users.id, session.userId))
+    .limit(1);
+  return userRows[0] ?? null;
+}
 
-  const [sessionId, token, extra] = rawValue.split(".");
-  if (!sessionId || !token || extra || sessionId.length !== 36 || token.length < 40) {
-    return null;
-  }
+export function getClientIp(hdrs: Headers): string {
+  const fwd = hdrs.get("x-forwarded-for");
+  if (fwd) return fwd.split(",")[0].trim();
+  return hdrs.get("x-real-ip") ?? "unknown";
+}
 
-  const [record] = await db
-    .select({
-      id: users.id,
-      email: users.email,
-      displayName: users.displayName,
-    })
-    .from(userSessions)
-    .innerJoin(users, eq(userSessions.userId, users.id))
+export async function countUsers(): Promise<number> {
+  const rows = await db.select({ c: sql<number>`count(*)` }).from(users);
+  return Number(rows[0]?.c ?? 0);
+}
+
+/** Rate limiting: max 5 failed attempts per IP in 15 minutes. */
+export async function isRateLimited(ip: string): Promise<boolean> {
+  const since = new Date(Date.now() - 1000 * 60 * 15);
+  const rows = await db
+    .select({ c: sql<number>`count(*)` })
+    .from(loginAttempts)
     .where(
       and(
-        eq(userSessions.id, sessionId),
-        eq(userSessions.tokenHash, secureHash(rawValue)),
-        gt(userSessions.expiresAt, new Date()),
+        eq(loginAttempts.ip, ip),
+        eq(loginAttempts.success, false),
+        gt(loginAttempts.createdAt, since),
       ),
-    )
-    .limit(1);
-
-  return record ?? null;
+    );
+  return Number(rows[0]?.c ?? 0) >= 5;
 }
 
-export async function assertSameOrigin() {
-  const requestHeaders = await headers();
-  const origin = requestHeaders.get("origin");
-  const host = requestHeaders.get("x-forwarded-host") ?? requestHeaders.get("host");
-
-  if (!origin || !host) return;
-
-  try {
-    if (new URL(origin).host !== host.split(",")[0].trim()) {
-      throw new Error("Invalid request origin");
-    }
-  } catch {
-    throw new Error("Solicitud rechazada por protección CSRF.");
-  }
+export async function recordAttempt(
+  ip: string,
+  username: string | null,
+  success: boolean,
+): Promise<void> {
+  await db.insert(loginAttempts).values({ ip, username, success });
 }
 
-export async function getRequestIp() {
-  const requestHeaders = await headers();
-  return (
-    requestHeaders.get("x-forwarded-for")?.split(",")[0].trim() ||
-    requestHeaders.get("x-real-ip") ||
-    "unknown"
-  );
+export async function getSessions(userId: number) {
+  return db
+    .select()
+    .from(sessions)
+    .where(eq(sessions.userId, userId))
+    .orderBy(desc(sessions.createdAt));
 }

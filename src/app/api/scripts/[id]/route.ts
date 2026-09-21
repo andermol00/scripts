@@ -1,69 +1,93 @@
-import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
 import { scripts } from "@/db/schema";
-import { eq } from "drizzle-orm";
-import { scriptInputSchema } from "@/lib/validation";
-import { requireApiAuth } from "@/lib/auth-guard";
+import { eq, and } from "drizzle-orm";
+import { getCurrentUser } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 
-function parseId(idParam: string) {
-  const id = Number(idParam);
-  return Number.isInteger(id) && id > 0 ? id : null;
+function normList(v: unknown): string {
+  if (Array.isArray(v)) {
+    return JSON.stringify(v.filter((x) => typeof x === "string" && x.trim()));
+  }
+  if (typeof v === "string") {
+    const arr = v
+      .split(/\r?\n/)
+      .map((s) => s.trim())
+      .filter(Boolean);
+    return JSON.stringify(arr);
+  }
+  return "[]";
 }
 
-export async function GET(_request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const authError = await requireApiAuth();
-  if (authError) return authError;
-
-  const { id: idParam } = await params;
-  const id = parseId(idParam);
-  if (!id) return NextResponse.json({ error: "Id inválido." }, { status: 400 });
-
-  const [row] = await db.select().from(scripts).where(eq(scripts.id, id)).limit(1);
-  if (!row) return NextResponse.json({ error: "No encontrado." }, { status: 404 });
-
-  return NextResponse.json({ script: row });
+async function owned(userId: number, id: number) {
+  const rows = await db
+    .select()
+    .from(scripts)
+    .where(and(eq(scripts.id, id), eq(scripts.userId, userId)))
+    .limit(1);
+  return rows[0] ?? null;
 }
 
-export async function PUT(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const authError = await requireApiAuth();
-  if (authError) return authError;
+export async function GET(
+  _req: Request,
+  { params }: { params: Promise<{ id: string }> },
+) {
+  const user = await getCurrentUser();
+  if (!user) return Response.json({ error: "No autorizado" }, { status: 401 });
+  const { id } = await params;
+  const script = await owned(user.id, Number(id));
+  if (!script) return Response.json({ error: "No encontrado" }, { status: 404 });
+  return Response.json({ script });
+}
 
-  const { id: idParam } = await params;
-  const id = parseId(idParam);
-  if (!id) return NextResponse.json({ error: "Id inválido." }, { status: 400 });
+export async function PUT(
+  req: Request,
+  { params }: { params: Promise<{ id: string }> },
+) {
+  const user = await getCurrentUser();
+  if (!user) return Response.json({ error: "No autorizado" }, { status: 401 });
+  const { id } = await params;
+  const existing = await owned(user.id, Number(id));
+  if (!existing)
+    return Response.json({ error: "No encontrado" }, { status: 404 });
 
-  const body = await request.json().catch(() => null);
-  const parsed = scriptInputSchema.safeParse(body);
-  if (!parsed.success) {
-    return NextResponse.json(
-      { error: "Datos inválidos.", details: parsed.error.flatten() },
-      { status: 400 },
-    );
+  const b = await req.json().catch(() => null);
+  const name = String(b?.name ?? existing.name).trim();
+  if (!name) {
+    return Response.json({ error: "El nombre es obligatorio." }, { status: 400 });
   }
 
-  const [row] = await db
+  const [updated] = await db
     .update(scripts)
-    .set({ ...parsed.data, updatedAt: new Date() })
-    .where(eq(scripts.id, id))
+    .set({
+      name,
+      namespace: String(b?.namespace ?? existing.namespace),
+      version: String(b?.version ?? existing.version),
+      description: String(b?.description ?? existing.description),
+      author: String(b?.author ?? existing.author),
+      matches: normList(b?.matches),
+      grants: normList(b?.grants),
+      runAt: String(b?.runAt ?? existing.runAt),
+      code: String(b?.code ?? existing.code),
+      obfuscate: Boolean(b?.obfuscate),
+      updatedAt: new Date(),
+    })
+    .where(eq(scripts.id, existing.id))
     .returning();
 
-  if (!row) return NextResponse.json({ error: "No encontrado." }, { status: 404 });
-
-  return NextResponse.json({ script: row });
+  return Response.json({ script: updated });
 }
 
-export async function DELETE(_request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const authError = await requireApiAuth();
-  if (authError) return authError;
-
-  const { id: idParam } = await params;
-  const id = parseId(idParam);
-  if (!id) return NextResponse.json({ error: "Id inválido." }, { status: 400 });
-
-  const [row] = await db.delete(scripts).where(eq(scripts.id, id)).returning();
-  if (!row) return NextResponse.json({ error: "No encontrado." }, { status: 404 });
-
-  return NextResponse.json({ ok: true });
+export async function DELETE(
+  _req: Request,
+  { params }: { params: Promise<{ id: string }> },
+) {
+  const user = await getCurrentUser();
+  if (!user) return Response.json({ error: "No autorizado" }, { status: 401 });
+  const { id } = await params;
+  const existing = await owned(user.id, Number(id));
+  if (!existing)
+    return Response.json({ error: "No encontrado" }, { status: 404 });
+  await db.delete(scripts).where(eq(scripts.id, existing.id));
+  return Response.json({ ok: true });
 }

@@ -1,8 +1,12 @@
-import { NextResponse } from "next/server";
-import { isAuthConfigured } from "@/lib/env";
+import { getCurrentUser, countUsers } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 
 export async function GET() {
-  return NextResponse.json({ configured: isAuthConfigured() });
+  const [user, total] = await Promise.all([getCurrentUser(), countUsers()]);
+  return Response.json({
+    needsSetup: total === 0,
+    authenticated: !!user,
+    username: user?.username ?? null,
+  });
 }

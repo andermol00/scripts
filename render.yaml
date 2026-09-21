@@ -1,49 +1,21 @@
-# Render.com Blueprint para Tampermonkey Vault
-# ------------------------------------------------
-# Este archivo le indica a Render que la app es un servicio web de Node.js
-# (no Ruby) y cómo construirla y arrancarla. Si Render detectó "Ruby" y
-# falló con "Could not locate Gemfile", este blueprint lo soluciona.
-#
-# Cómo usarlo:
-#   1. Sube este archivo (y todo el repo) a GitHub.
-#   2. En Render: New + -> "Blueprint" -> conecta este repositorio.
-#   3. Render leerá este render.yaml y creará el servicio web + la base de datos.
-#   4. Configura las variables de entorno del bloque `envVars` marcadas como
-#      sync:false (las credenciales de admin) en el panel de Render.
-#
-# Genera las credenciales con:   node scripts/setup-admin.mjs
-
 services:
   - type: web
-    name: tampermonkey-vault
+    name: tampervault
     runtime: node
     plan: free
-    buildCommand: npm install --include=dev && npx drizzle-kit push --force && npm run build
+    buildCommand: npm install && npm run build
     startCommand: npm run start
     healthCheckPath: /api/health
-    autoDeploy: true
     envVars:
-      - key: NODE_VERSION
-        value: "22"
       - key: NODE_ENV
         value: production
-      # La base de datos se enlaza automáticamente desde el bloque `databases`.
+      - key: SESSION_SECRET
+        generateValue: true
       - key: DATABASE_URL
         fromDatabase:
-          name: tampermonkey-vault-db
+          name: tampervault-db
           property: connectionString
-      # ---- Credenciales de administrador (NO las subas al repo) ----
-      # Genera sus valores con: node scripts/setup-admin.mjs
-      # y pégalos en el panel de Render (Environment).
-      - key: ADMIN_USERNAME
-        sync: false
-      - key: ADMIN_PASSWORD_HASH
-        sync: false
-      - key: ADMIN_TOTP_SECRET
-        sync: false
-      - key: AUTH_SECRET
-        sync: false
 
 databases:
-  - name: tampermonkey-vault-db
+  - name: tampervault-db
     plan: free

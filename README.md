@@ -1,134 +1,56 @@
-# 🔒 Tampermonkey Vault
+# 🔐 Tampervault
 
-Bóveda privada para **guardar tus userscripts de Tampermonkey** y **generar
-versiones ofuscadas o limpias** listas para instalar. Protegida con un login
-ultra seguro (contraseña con hash bcrypt + doble factor TOTP + bloqueo por
-intentos fallidos).
+Bóveda web para guardar tus **scripts de Tampermonkey** y generar userscripts listos
+para instalar — con la opción de **ofuscarlos o dejarlos legibles** (hay un checkbox).
+Incluye un **login ultra-seguro** de un solo administrador.
 
-Construida con **Next.js (App Router) + PostgreSQL (Drizzle ORM)**. Lista para
-desplegar en **Render.com** desde **GitHub**.
+## Características
 
----
+- **Login blindado**
+  - Contraseñas con `scrypt` + sal aleatoria (nunca en texto plano).
+  - Cookies de sesión `httpOnly` + `secure` firmadas con HMAC-SHA256.
+  - Sesiones almacenadas en base de datos con expiración (12 h).
+  - Límite de intentos: 5 fallos por IP cada 15 minutos.
+  - Registro bloqueado tras crear el primer administrador (single-tenant).
+  - Comparación de contraseñas en tiempo constante (anti timing / enumeración).
+- **Gestor de scripts**: crear, editar, eliminar, con metadatos (`@match`, `@grant`,
+  `@run-at`, versión, autor, etc.).
+- **Pegar un script ya hecho**: pega un `.user.js` completo (o solo el código JS)
+  y el importador lee la cabecera `==UserScript==` y rellena nombre, versión,
+  `@match`, `@grant`, `@run-at`… automáticamente. Detecta y desenvuelve el
+  `IIFE` para no duplicarlo al exportar.
+- **Generador de userscript**: construye la cabecera `==UserScript==` y el cuerpo.
+  Con el **checkbox de ofuscación** decides si el resultado sale ofuscado o legible.
+- **Copiar / Descargar** el `.user.js` con un clic.
 
-## ✨ Funciones
-
-- **Guardar scripts**: nombre, descripción, versión, autor, `@match`, `@grant`,
-  `@run-at`, URLs de update/download y el código.
-- **Generar `.user.js` para Tampermonkey** con la cabecera de metadatos
-  automática. Eliges el nivel:
-  - **Sin ofuscar** (código legible, un simple check) ✅
-  - **Ofuscación básica** (renombra variables, codifica cadenas)
-  - **Ofuscación fuerte** (control de flujo, código señuelo, auto-defensa)
-- **Ofuscador rápido**: pega cualquier JS y ofúscalo al vuelo, con un check
-  para activar/desactivar la ofuscación.
-- **Copiar** al portapapeles o **descargar** el archivo `.user.js`.
-
-## 🛡️ Seguridad del login
-
-- Contraseña almacenada como **hash bcrypt** (nunca en texto plano).
-- **Doble factor TOTP** (Google Authenticator, Authy, 1Password…).
-- **Bloqueo progresivo** por IP+usuario tras varios intentos fallidos
-  (persistido en la base de datos, sobrevive a reinicios).
-- Sesiones firmadas con **JWT (HS256)** en cookie `httpOnly` + `secure`.
-- **Defensa en profundidad**: cada página protegida y cada endpoint API
-  vuelven a verificar la sesión en el servidor (no dependen solo del proxy),
-  mitigando bypasses tipo CVE-2025-29927.
-- Cabeceras de seguridad (HSTS, X-Frame-Options, nosniff, etc.).
-
----
-
-## 🚀 Puesta en marcha local
+## Desarrollo local
 
 ```bash
+cp .env.example .env      # ajusta DATABASE_URL y SESSION_SECRET
 npm install
-
-# 1. Genera tus credenciales de administrador
-node scripts/setup-admin.mjs
-# (opcional) node scripts/setup-admin.mjs miusuario "MiContraseñaSúperLarga"
-
-# 2. Copia las 4 variables que imprime (ADMIN_USERNAME, ADMIN_PASSWORD_HASH,
-#    ADMIN_TOTP_SECRET, AUTH_SECRET) a tu archivo .env
-cp .env.example .env   # y edítalo
-
-# 3. Escanea el QR (o la URL otpauth://) con tu app de autenticación
-
-# 4. Crea las tablas
-npx drizzle-kit push
-
-# 5. Arranca
+npx drizzle-kit push      # crea las tablas
 npm run dev
 ```
 
-Entra en `http://localhost:3000/login` con tu usuario, contraseña y el código
-de 6 dígitos de la app de autenticación.
+Abre http://localhost:3000, crea la cuenta de administrador y empieza a guardar scripts.
 
----
+## Desplegar en Render.com desde GitHub
 
-## ☁️ Despliegue en Render.com desde GitHub
+1. Sube este repositorio a GitHub.
+2. En Render, elige **New +** → **Blueprint** y apunta a tu repo.
+3. Render leerá `render.yaml`: crea la base de datos PostgreSQL, genera
+   `SESSION_SECRET` y conecta `DATABASE_URL` automáticamente.
+4. Tras el primer deploy, abre la URL y crea el administrador.
 
-Este repo incluye un **`render.yaml`** (blueprint) que crea el servicio web y
-la base de datos automáticamente y evita el error típico de que Render intente
-compilar el proyecto como **Ruby** (`Could not locate Gemfile`).
+> El healthcheck de Render usa `/api/health`.
 
-### Pasos
+Si prefieres configurarlo a mano, crea un servicio Web con:
 
-1. Sube el proyecto a un repositorio de GitHub.
-   > ⚠️ Asegúrate de que tu `.env` **NO** se sube (ya está en `.gitignore`).
+- **Build**: `npm install && npm run build`
+- **Start**: `npm run start`
+- Variables: `DATABASE_URL`, `SESSION_SECRET`, `NODE_ENV=production`
+- Tras conectar la base de datos, ejecuta `npx drizzle-kit push` una vez.
 
-2. En Render pulsa **New +** → **Blueprint** y conecta tu repositorio.
-   Render leerá `render.yaml` y creará:
-   - un **Web Service** de tipo **Node** (build + start correctos), y
-   - una base de datos **PostgreSQL**.
+## Stack
 
-3. Genera tus credenciales en tu máquina:
-   ```bash
-   node scripts/setup-admin.mjs
-   ```
-   y en el panel de Render, dentro del servicio → **Environment**, añade:
-   - `ADMIN_USERNAME`
-   - `ADMIN_PASSWORD_HASH`
-   - `ADMIN_TOTP_SECRET`
-   - `AUTH_SECRET`
-
-   (`DATABASE_URL` se rellena sola desde la base de datos del blueprint.)
-
-4. Guarda y deja que Render despliegue. El `buildCommand` ya:
-   - instala dependencias (incluidas las de desarrollo),
-   - crea las tablas (`drizzle-kit push`),
-   - y compila la app (`next build`).
-
-5. El healthcheck de Render apunta a `/api/health`.
-
-### ¿Ya creaste el servicio como "Ruby" por error?
-
-Si te salió el error `Could not locate Gemfile`, es porque el servicio se creó
-con el runtime equivocado. Bórralo y vuelve a crearlo con **Blueprint** (usando
-este `render.yaml`), o edita el servicio existente y cambia manualmente:
-
-- **Language / Runtime**: `Node`
-- **Build Command**: `npm install --include=dev && npx drizzle-kit push --force && npm run build`
-- **Start Command**: `npm run start`
-- **Health Check Path**: `/api/health`
-- Variables de entorno: las 4 de admin + `DATABASE_URL`.
-
----
-
-## 🧩 Cómo instalar un script generado en Tampermonkey
-
-1. Genera el `.user.js` (ofuscado o no) desde la página del script.
-2. Cópialo o descárgalo.
-3. En Tampermonkey → **Crear un nuevo script**, pega el contenido y guarda
-   (o abre el archivo `.user.js` descargado, que Tampermonkey detecta como
-   instalable).
-
----
-
-## Scripts útiles
-
-| Comando | Descripción |
-| --- | --- |
-| `npm run dev` | Servidor de desarrollo |
-| `npm run build` | Build de producción |
-| `npm run start` | Servidor de producción |
-| `node scripts/setup-admin.mjs` | Genera credenciales de admin + QR TOTP |
-| `npx drizzle-kit push` | Aplica el esquema a la base de datos |
+Next.js (App Router) · React · PostgreSQL · Drizzle ORM · Tailwind CSS · `node:crypto`.

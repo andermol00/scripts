@@ -3,15 +3,17 @@ import type { ReactNode } from "react";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Tampermonkey Vault — Bóveda privada de userscripts",
+  title: "Tampervault — Bóveda de scripts para Tampermonkey",
   description:
-    "Guarda tus scripts de Tampermonkey y genera versiones ofuscadas o limpias listas para instalar, protegido con login ultra seguro.",
+    "Guarda tus scripts de Tampermonkey y genera userscripts (ofuscados o no) con un login ultra-seguro.",
 };
 
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="es">
-      <body className="bg-slate-950 text-slate-100 antialiased">{children}</body>
+      <body className="min-h-screen bg-slate-950 text-slate-100 antialiased">
+        {children}
+      </body>
     </html>
   );
 }
