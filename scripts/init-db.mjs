@@ -22,7 +22,7 @@ function resolveDatabaseUrl() {
     const match = raw.match(/^\s*DATABASE_URL\s*=\s*(.+)\s*$/m);
     if (match) return match[1].trim().replace(/^["']|["']$/g, "");
   }
-  throw new Error("DATABASE_URL no está definida");
+  return null;
 }
 
 const STATEMENTS = [
@@ -157,9 +157,22 @@ const MIGRATIONS = [
 ];
 
 async function main() {
+  const url = resolveDatabaseUrl();
+  if (!url) {
+    // No rompemos el build: en Render las variables pueden no estar expuestas
+    // durante la compilación. Se avisa con claridad y se continúa.
+    console.warn(
+      "[init-db] DATABASE_URL no disponible en esta etapa; se omite la creación de tablas.\n" +
+        "[init-db] Ejecútalo después desde la shell del servicio: node scripts/init-db.mjs",
+    );
+    return;
+  }
+
   const client = new pg.Client({
-    connectionString: resolveDatabaseUrl(),
-    ssl: process.env.NODE_ENV === "production" ? { rejectUnauthorized: false } : undefined,
+    connectionString: url,
+    ssl: /(localhost|127\.0\.0\.1|\[::1\])/.test(url)
+      ? undefined
+      : { rejectUnauthorized: false },
   });
 
   try {
