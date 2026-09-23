@@ -46,12 +46,34 @@ const STATEMENTS = [
   `CREATE INDEX IF NOT EXISTS "sessions_user_idx" ON sessions ("user_id")`,
   `CREATE TABLE IF NOT EXISTS login_attempts (
      "id" serial PRIMARY KEY,
-     "ip" text NOT NULL,
+     "ip" text NOT NULL DEFAULT '',
      "username" text,
      "success" boolean NOT NULL DEFAULT false,
+     "identifier" text,
+     "attempts" integer NOT NULL DEFAULT 0,
+     "locked_until" timestamp,
+     "last_attempt_at" timestamp,
      "created_at" timestamp NOT NULL DEFAULT now()
    )`,
+  // Columnas del rate limiter con bloqueo exponencial. Deben agregarse ANTES
+  // de crear los índices que las referencian (para bases ya existentes).
+  `ALTER TABLE login_attempts ADD COLUMN IF NOT EXISTS "identifier" text`,
+  `ALTER TABLE login_attempts ADD COLUMN IF NOT EXISTS "attempts" integer NOT NULL DEFAULT 0`,
+  `ALTER TABLE login_attempts ADD COLUMN IF NOT EXISTS "locked_until" timestamp`,
+  `ALTER TABLE login_attempts ADD COLUMN IF NOT EXISTS "last_attempt_at" timestamp`,
+  `ALTER TABLE login_attempts ALTER COLUMN "ip" SET DEFAULT ''`,
   `CREATE INDEX IF NOT EXISTS "login_attempts_ip_idx" ON login_attempts ("ip")`,
+  `CREATE INDEX IF NOT EXISTS "login_attempts_identifier_idx"
+     ON login_attempts ("identifier")`,
+  `CREATE TABLE IF NOT EXISTS login_events (
+     "id" serial PRIMARY KEY,
+     "identifier" text NOT NULL,
+     "success" boolean NOT NULL DEFAULT false,
+     "reason" text NOT NULL DEFAULT '',
+     "created_at" timestamp NOT NULL DEFAULT now()
+   )`,
+  `CREATE INDEX IF NOT EXISTS "login_events_identifier_idx"
+     ON login_events ("identifier")`,
   `CREATE TABLE IF NOT EXISTS scripts (
      "id" serial PRIMARY KEY,
      "user_id" integer NOT NULL REFERENCES users("id") ON DELETE CASCADE,

@@ -39,17 +39,45 @@ export const sessions = pgTable(
   }),
 );
 
+/**
+ * Supports two complementary strategies:
+ *  - simple IP-based counting (ip / username / success / created_at)
+ *  - exponential lockout keyed by a hashed ip::username `identifier`
+ *    (attempts / locked_until / last_attempt_at)
+ * All the extra columns are nullable or defaulted so either writer works.
+ */
 export const loginAttempts = pgTable(
   "login_attempts",
   {
     id: serial("id").primaryKey(),
-    ip: text("ip").notNull(),
+    ip: text("ip").notNull().default(""),
     username: text("username"),
     success: boolean("success").notNull().default(false),
+    // SHA-256 of `${ip}::${username}` — never store the raw pair.
+    identifier: text("identifier"),
+    attempts: integer("attempts").notNull().default(0),
+    lockedUntil: timestamp("locked_until"),
+    lastAttemptAt: timestamp("last_attempt_at"),
     createdAt: timestamp("created_at").notNull().defaultNow(),
   },
   (t) => ({
     ipIdx: index("login_attempts_ip_idx").on(t.ip),
+    identifierIdx: index("login_attempts_identifier_idx").on(t.identifier),
+  }),
+);
+
+/** Audit trail of every login outcome (used by the rate limiter). */
+export const loginEvents = pgTable(
+  "login_events",
+  {
+    id: serial("id").primaryKey(),
+    identifier: text("identifier").notNull(),
+    success: boolean("success").notNull().default(false),
+    reason: text("reason").notNull().default(""),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+  },
+  (t) => ({
+    identifierIdx: index("login_events_identifier_idx").on(t.identifier),
   }),
 );
 
