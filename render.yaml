@@ -3,9 +3,10 @@ services:
     name: tampervault
     runtime: node
     plan: free
-    # El init-db.mjs crea las tablas automáticamente (idempotente) antes de compilar.
-    buildCommand: npm install && node scripts/init-db.mjs && npm run build
-    startCommand: npm run start
+    # init-db es un primer respaldo; /api/health también verifica/crea el
+    # esquema en runtime, por si DATABASE_URL no está visible durante el build.
+    buildCommand: yarn install && node scripts/init-db.mjs && yarn build
+    startCommand: yarn start
     healthCheckPath: /api/health
     autoDeploy: true
     envVars:

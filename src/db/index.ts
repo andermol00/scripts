@@ -1,35 +1,59 @@
 import { drizzle } from "drizzle-orm/node-postgres";
-import { Pool } from "pg";
+import { Pool, type PoolConfig } from "pg";
 
 const globalForDb = globalThis as typeof globalThis & {
   __arenaNextJsPostgresqlPool?: Pool;
 };
 
 /**
- * IMPORTANT: this module must never throw at import time.
- *
- * `next build` imports the route graph while "Collecting page data", and on
- * Render there is no `.env` file (it is gitignored), so `DATABASE_URL` can be
- * undefined during the build. Throwing here fails the deploy even though the
- * app would work fine at runtime. The connection is opened lazily by `pg` on
- * the first query instead.
+ * Never throw at import time: Next imports route modules during `next build`,
+ * where DATABASE_URL might intentionally be unavailable. Queries are lazy.
  */
 const connectionString = process.env.DATABASE_URL;
 
-// Render's managed Postgres requires TLS; a local socket does not. Decide by
-// host rather than by NODE_ENV so production builds against localhost work.
-function needsSsl(url: string | undefined): boolean {
-  if (!url) return false;
-  return !/(localhost|127\.0\.0\.1|\[::1\])/.test(url);
+function poolConfig(url: string | undefined): PoolConfig {
+  const config: PoolConfig = {
+    connectionString: url,
+    max: 10,
+    connectionTimeoutMillis: 8_000,
+    idleTimeoutMillis: 30_000,
+    // Prevent a broken query from occupying a connection forever.
+    statement_timeout: 15_000,
+    query_timeout: 18_000,
+    application_name: "tampervault",
+  };
+
+  if (!url) return config;
+
+  try {
+    const parsed = new URL(url);
+    const sslMode = parsed.searchParams.get("sslmode")?.toLowerCase();
+    const local = ["localhost", "127.0.0.1", "::1"].includes(parsed.hostname);
+    const renderExternal = parsed.hostname.endsWith(".render.com");
+
+    if (sslMode === "disable" || local) {
+      config.ssl = false;
+    } else if (
+      sslMode === "require" ||
+      sslMode === "verify-ca" ||
+      sslMode === "verify-full" ||
+      renderExternal
+    ) {
+      // Render's external URL requires TLS; internal TLS uses self-signed certs.
+      config.ssl = { rejectUnauthorized: false };
+    }
+    // For a Render internal URL without sslmode, leave SSL unspecified: Render
+    // supports plain private-network connections and this avoids TLS mismatch.
+  } catch {
+    // A malformed URL will fail quickly on the first query with a useful pg
+    // error; it still must not break `next build` at module import time.
+  }
+
+  return config;
 }
 
 export const pool =
-  globalForDb.__arenaNextJsPostgresqlPool ??
-  new Pool({
-    connectionString,
-    ssl: needsSsl(connectionString) ? { rejectUnauthorized: false } : undefined,
-    max: 10,
-  });
+  globalForDb.__arenaNextJsPostgresqlPool ?? new Pool(poolConfig(connectionString));
 
 if (process.env.NODE_ENV !== "production") {
   globalForDb.__arenaNextJsPostgresqlPool = pool;
@@ -37,12 +61,8 @@ if (process.env.NODE_ENV !== "production") {
 
 export const db = drizzle(pool);
 
-/**
- * Explicit, friendly check for runtime code paths that want a clear error
- * message instead of a low-level connection failure.
- */
 export function assertDatabaseUrl(): string {
-  const url = process.env.DATABASE_URL;
+  const url = process.env.DATABASE_URL?.trim();
   if (!url) {
     throw new Error(
       "DATABASE_URL no está definida. Configúrala en Render → Environment.",
