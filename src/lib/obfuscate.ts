@@ -1,37 +1,53 @@
 /**
- * Lightweight, dependency-free JS obfuscator.
+ * Dependency-free JS obfuscator with three levels.
  *
- * It encodes the source with a per-payload XOR key and Base64, then emits a
- * small self-decoding loader. This keeps the readable source hidden while
- * remaining 100% functional inside Tampermonkey (which runs it via eval-like
- * execution). It is an obfuscator, not real encryption — treat it as such.
+ *  - none   → the source is returned untouched (readable output)
+ *  - basic  → single XOR key + Base64 + self-decoding loader
+ *  - strong → rotating XOR key + byte reversal + Base64 + chunk permutation
+ *             + hex-style identifiers
+ *
+ * The output is still plain JavaScript that Tampermonkey can execute; this is
+ * obfuscation (source hiding), not real encryption.
  */
 
-function toBase64(input: string): string {
-  return Buffer.from(input, "utf-8").toString("base64");
+export type ObfuscationLevel = "none" | "basic" | "strong";
+
+export const OBFUSCATION_LEVELS: ObfuscationLevel[] = [
+  "none",
+  "basic",
+  "strong",
+];
+
+export function isObfuscationLevel(value: unknown): value is ObfuscationLevel {
+  return (
+    value === "none" || value === "basic" || value === "strong"
+  );
 }
 
-export function obfuscateCode(source: string): string {
-  // Random XOR key (0-255) and rotated variable names.
-  const key = Math.floor(Math.random() * 200) + 20;
+function rand(min: number, max: number): number {
+  return Math.floor(Math.random() * (max - min + 1)) + min;
+}
+
+function rid(): string {
+  return "_0x" + Math.random().toString(16).slice(2, 8);
+}
+
+function basicObfuscate(source: string): string {
+  const key = rand(20, 219);
 
   const xored = Array.from(Buffer.from(source, "utf-8"))
-    .map((b) => b ^ key)
-    .map((b) => String.fromCharCode(b))
+    .map((b) => String.fromCharCode(b ^ key))
     .join("");
 
-  const payload = toBase64(xored);
+  const payload = Buffer.from(xored, "latin1").toString("base64");
 
-  // Random-ish identifiers to reduce readability.
-  const rid = () => "_" + Math.random().toString(36).slice(2, 8);
   const vPayload = rid();
   const vKey = rid();
   const vDec = rid();
   const vI = rid();
   const vOut = rid();
-  const vRun = rid();
 
-  return `/* Obfuscated by Tampervault. Do not edit the block below. */
+  return `/* Obfuscated by Tampervault (basic). Do not edit the block below. */
 (function(){
   var ${vPayload} = "${payload}";
   var ${vKey} = ${key};
@@ -43,10 +59,94 @@ export function obfuscateCode(source: string): string {
     ${vOut} += String.fromCharCode(${vDec}.charCodeAt(${vI}) ^ ${vKey});
   }
   try {
-    var ${vRun} = (0, eval);
-    ${vRun}(decodeURIComponent(escape(${vOut})));
+    (0, eval)(decodeURIComponent(escape(${vOut})));
   } catch (e) {
     console.error("[Tampervault] execution error:", e);
   }
 })();`;
+}
+
+function strongObfuscate(source: string): string {
+  const base = rand(1, 255);
+  const step = rand(1, 127) * 2 + 1; // odd step spreads the key better
+
+  const bytes = Buffer.from(source, "utf-8");
+  const xored = Buffer.alloc(bytes.length);
+  for (let i = 0; i < bytes.length; i++) {
+    xored[i] = bytes[i] ^ ((base + i * step) & 0xff);
+  }
+
+  // Reverse the byte stream so the payload can't be decoded left-to-right.
+  const reversed = Buffer.from(xored).reverse();
+  const b64 = reversed.toString("base64");
+
+  const chunkSize = rand(16, 48);
+  const chunks: string[] = [];
+  for (let i = 0; i < b64.length; i += chunkSize) {
+    chunks.push(b64.slice(i, i + chunkSize));
+  }
+  if (chunks.length === 0) chunks.push("");
+
+  // Shuffle the chunks and store the inverse permutation to reassemble them.
+  const order = chunks.map((_, i) => i);
+  for (let i = order.length - 1; i > 0; i--) {
+    const j = rand(0, i);
+    [order[i], order[j]] = [order[j], order[i]];
+  }
+  const shuffled = order.map((i) => chunks[i]);
+  const inv: number[] = new Array(order.length);
+  order.forEach((origIdx, k) => {
+    inv[origIdx] = k;
+  });
+
+  const vArr = rid();
+  const vPerm = rid();
+  const vB64 = rid();
+  const vJ = rid();
+  const vBin = rid();
+  const vOut = rid();
+  const vI = rid();
+  const vSrc = rid();
+
+  return `/* Obfuscated by Tampervault (strong). Do not edit the block below. */
+(function(){
+  var ${vArr} = ${JSON.stringify(shuffled)};
+  var ${vPerm} = ${JSON.stringify(inv)};
+  var ${vB64} = "";
+  for (var ${vJ} = 0; ${vJ} < ${vPerm}.length; ${vJ}++) {
+    ${vB64} += ${vArr}[${vPerm}[${vJ}]];
+  }
+  var ${vBin};
+  try {
+    ${vBin} = atob(${vB64});
+  } catch (e) {
+    ${vBin} = (typeof Buffer !== "undefined")
+      ? Buffer.from(${vB64}, "base64").toString("binary")
+      : "";
+  }
+  var ${vOut} = new Array(${vBin}.length);
+  for (var ${vI} = 0; ${vI} < ${vBin}.length; ${vI}++) {
+    var ${vJ} = ${vBin}.length - 1 - ${vI};
+    ${vOut}[${vJ}] = String.fromCharCode(
+      ${vBin}.charCodeAt(${vI}) ^ ((${base} + ${vJ} * ${step}) & 255)
+    );
+  }
+  var ${vSrc} = ${vOut}.join("");
+  try {
+    ${vSrc} = decodeURIComponent(escape(${vSrc}));
+  } catch (e) { /* keep raw */ }
+  try {
+    (0, eval)(${vSrc});
+  } catch (e) {
+    console.error("[Tampervault] execution error:", e);
+  }
+})();`;
+}
+
+export function obfuscateCode(
+  source: string,
+  level: ObfuscationLevel = "basic",
+): string {
+  if (level === "none") return source;
+  return level === "strong" ? strongObfuscate(source) : basicObfuscate(source);
 }

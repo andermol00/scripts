@@ -1,10 +1,35 @@
 import type { Script } from "@/db/schema";
-import { obfuscateCode } from "./obfuscate";
+import {
+  obfuscateCode,
+  isObfuscationLevel,
+  type ObfuscationLevel,
+} from "./obfuscate";
 
-/** Build a complete Tampermonkey userscript from a stored record. */
-export function buildUserscript(script: Script): string {
+/**
+ * Picks the effective obfuscation level. When the caller doesn't pass one, it
+ * falls back to the script's `obfuscateByDefault` flag.
+ */
+export function resolveLevel(
+  level: unknown,
+  obfuscateByDefault: boolean,
+): ObfuscationLevel {
+  if (isObfuscationLevel(level)) return level;
+  return obfuscateByDefault ? "basic" : "none";
+}
+
+/**
+ * Build a complete Tampermonkey userscript from a stored record.
+ *
+ * @param script stored row
+ * @param level  optional obfuscation level ("none" | "basic" | "strong")
+ */
+export function buildUserscript(
+  script: Script,
+  level?: ObfuscationLevel | string,
+): string {
   const matches = script.matches ?? [];
   const grants = script.grants ?? [];
+  const chosen = resolveLevel(level, script.obfuscateByDefault);
 
   const lines: string[] = [];
   lines.push("// ==UserScript==");
@@ -30,9 +55,7 @@ export function buildUserscript(script: Script): string {
   lines.push("// ==/UserScript==");
   lines.push("");
 
-  const body = script.obfuscateByDefault
-    ? obfuscateCode(script.code)
-    : script.code;
+  const body = obfuscateCode(script.code, chosen);
 
   lines.push("(function () {");
   lines.push("    'use strict';");
@@ -41,6 +64,14 @@ export function buildUserscript(script: Script): string {
   lines.push("})();");
 
   return lines.join("\n");
+}
+
+/** Safe filename for the generated .user.js download. */
+export function scriptFilename(name: string): string {
+  const base =
+    name.replace(/[^a-z0-9-_]+/gi, "_").toLowerCase().replace(/^_+|_+$/g, "") ||
+    "script";
+  return `${base}.user.js`;
 }
 
 function indent(text: string, spaces: number): string {

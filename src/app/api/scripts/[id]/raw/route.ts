@@ -22,9 +22,13 @@ export async function GET(
   const script = rows[0];
   if (!script) return new Response("No encontrado", { status: 404 });
 
-  const code = buildUserscript(script);
   const url = new URL(req.url);
   const download = url.searchParams.get("download") === "1";
+  const levelParam = url.searchParams.get("level");
+  const code = buildUserscript(
+    script,
+    levelParam ?? undefined,
+  );
   const safeName =
     script.name.replace(/[^a-z0-9-_]+/gi, "_").toLowerCase() || "script";
 

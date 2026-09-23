@@ -19,8 +19,19 @@ Incluye un **login ultra-seguro** de un solo administrador.
   y el importador lee la cabecera `==UserScript==` y rellena nombre, versión,
   `@match`, `@grant`, `@run-at`… automáticamente. Detecta y desenvuelve el
   `IIFE` para no duplicarlo al exportar.
-- **Generador de userscript**: construye la cabecera `==UserScript==` y el cuerpo.
-  Con el **checkbox de ofuscación** decides si el resultado sale ofuscado o legible.
+- **Generador de userscript**: construye la cabecera `==UserScript==` (incluidos
+  `@updateURL` y `@downloadURL`) y el cuerpo, con **tres niveles de ofuscación**:
+  - `none` → código legible (ideal para revisar).
+  - `basic` → XOR + Base64 con auto-decodificador.
+  - `strong` → XOR con clave rotatoria + inversión de bytes + Base64 +
+    permutación de fragmentos + identificadores hexadecimales.
+
+  Los tres niveles se validaron ejecutando el resultado (incluidos acentos/UTF-8
+  y payloads de varios KB). Endpoints: `POST /api/scripts/:id/generate` con
+  `{ "level": "none" | "basic" | "strong" }`, `GET /api/scripts/:id/raw?level=…`
+  y `POST /api/tools/obfuscate` (ofuscador rápido que no guarda nada).
+- **Validación con zod** (`src/lib/validation.ts`): `scriptInputSchema`,
+  `generateSchema` y `obfuscateToolSchema`.
 - **Copiar / Descargar** el `.user.js` con un clic.
 
 ## Desarrollo local
@@ -129,6 +140,37 @@ Las API aceptan además `matches`/`grants` como array **o** como string JSON
 > `src/components/auth-gate.tsx`, `script-editor.tsx`, `script-list-item.tsx`
 > (minúsculas), y `src/app/page.tsx` frente a `src/app/(app)/page.tsx`
 > (dos páginas que resuelven a `/` rompen el build).
+
+### `Type error: Expected 1 arguments, but got 2` en `generate/route.ts`
+
+La ruta `POST /api/scripts/[id]/generate` llama a `buildUserscript(row, level)`,
+así que el generador debe aceptar el nivel de ofuscación. En esta versión ya es
+así:
+
+```ts
+// src/lib/userscript.ts
+export function buildUserscript(
+  script: Script,
+  level?: ObfuscationLevel | string,   // "none" | "basic" | "strong"
+): string
+```
+
+Si tu repo todavía tiene el `userscript.ts` de un solo argumento, copia los
+archivos `src/lib/userscript.ts` y `src/lib/obfuscate.ts` de esta versión.
+
+### `Module not found: Can't resolve 'zod'` (tras borrar `yarn.lock`)
+
+`src/lib/validation.ts` usa **zod**, pero en el repo original esa dependencia
+**no estaba declarada** en `package.json`: solo funcionaba porque `yarn.lock` la
+arrastraba. Al eliminar el lockfile (o al usar npm) la dependencia desaparece y
+el build revienta. Aquí ya está declarada correctamente:
+
+```bash
+npm install zod          # o: yarn add zod
+```
+
+Regla general: **toda librería importada debe estar en `package.json`**, no solo
+en el lockfile.
 
 ### `relation "users" does not exist` / health check falla
 

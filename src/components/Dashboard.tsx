@@ -41,6 +41,8 @@ type View =
   | { mode: "new"; importOpen: boolean }
   | { mode: "edit"; id: number };
 
+type Level = "none" | "basic" | "strong";
+
 export default function Dashboard({
   username,
   onLogout,
@@ -56,6 +58,7 @@ export default function Dashboard({
     null,
   );
   const [copied, setCopied] = useState(false);
+  const [level, setLevel] = useState<Level>("none");
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -97,10 +100,18 @@ export default function Dashboard({
     await load();
   }
 
-  async function showPreview(id: number) {
-    const res = await fetch(`/api/scripts/${id}/raw`);
-    const code = await res.text();
-    setPreview({ id, code });
+  async function showPreview(id: number, lvl: Level = level) {
+    const res = await fetch(`/api/scripts/${id}/generate`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ level: lvl }),
+    });
+    if (!res.ok) {
+      alert("No se pudo generar el script.");
+      return;
+    }
+    const data = await res.json();
+    setPreview({ id, code: data.code });
     setCopied(false);
   }
 
@@ -223,7 +234,7 @@ export default function Dashboard({
                           Generar
                         </button>
                         <a
-                          href={`/api/scripts/${s.id}/raw?download=1`}
+                          href={`/api/scripts/${s.id}/raw?download=1&level=${level}`}
                           className="rounded-md bg-slate-800 px-3 py-1.5 text-xs text-slate-200 transition hover:bg-slate-700"
                         >
                           Descargar .user.js
@@ -252,14 +263,30 @@ export default function Dashboard({
                 <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-400">
                   Userscript generado
                 </h2>
-                {preview && (
-                  <button
-                    onClick={copyPreview}
-                    className="rounded-md bg-indigo-600 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-indigo-500"
+                <div className="flex items-center gap-2">
+                  <select
+                    value={level}
+                    onChange={(e) => {
+                      const next = e.target.value as Level;
+                      setLevel(next);
+                      if (preview) showPreview(preview.id, next);
+                    }}
+                    className="rounded-md border border-slate-700 bg-slate-800 px-2 py-1.5 text-xs outline-none focus:border-indigo-500"
+                    title="Nivel de ofuscación"
                   >
-                    {copied ? "¡Copiado!" : "Copiar"}
-                  </button>
-                )}
+                    <option value="none">Sin ofuscar</option>
+                    <option value="basic">Ofuscado básico</option>
+                    <option value="strong">Ofuscado fuerte</option>
+                  </select>
+                  {preview && (
+                    <button
+                      onClick={copyPreview}
+                      className="rounded-md bg-indigo-600 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-indigo-500"
+                    >
+                      {copied ? "¡Copiado!" : "Copiar"}
+                    </button>
+                  )}
+                </div>
               </div>
               {preview ? (
                 <pre className="mono max-h-[70vh] overflow-auto rounded-xl border border-slate-800 bg-slate-950 p-4 text-xs leading-relaxed text-emerald-200">
