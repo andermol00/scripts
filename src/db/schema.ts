@@ -63,13 +63,15 @@ export const scripts = pgTable("scripts", {
   version: text("version").notNull().default("1.0.0"),
   description: text("description").notNull().default(""),
   author: text("author").notNull().default(""),
-  // JSON-encoded array of @match patterns
-  matches: text("matches").notNull().default("[]"),
-  // JSON-encoded array of @grant values
-  grants: text("grants").notNull().default("[]"),
+  // Native Postgres arrays of @match patterns / @grant values
+  matches: text("matches").array().notNull().default([]),
+  grants: text("grants").array().notNull().default([]),
   runAt: text("run_at").notNull().default("document-idle"),
+  updateUrl: text("update_url").notNull().default(""),
+  downloadUrl: text("download_url").notNull().default(""),
   code: text("code").notNull().default(""),
-  obfuscate: boolean("obfuscate").notNull().default(false),
+  // Whether generated output is obfuscated by default
+  obfuscateByDefault: boolean("obfuscate_by_default").notNull().default(false),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });

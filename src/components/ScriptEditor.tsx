@@ -12,6 +12,7 @@ const GRANT_OPTIONS = [
   "GM_listValues",
   "GM_addStyle",
   "GM_xmlhttpRequest",
+  "GM_registerMenuCommand",
   "GM_openInTab",
   "GM_notification",
   "GM_setClipboard",
@@ -34,6 +35,33 @@ type Props = {
   startOpenImport?: boolean;
 };
 
+const inputCls =
+  "w-full rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-sm outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/30";
+
+function Field({
+  label,
+  children,
+}: {
+  label: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div>
+      <label className="mb-1 block text-xs font-medium text-slate-400">
+        {label}
+      </label>
+      {children}
+    </div>
+  );
+}
+
+function linesToArr(text: string): string[] {
+  return text
+    .split(/\r?\n/)
+    .map((s) => s.trim())
+    .filter(Boolean);
+}
+
 export default function ScriptEditor({
   initial,
   saving,
@@ -42,12 +70,25 @@ export default function ScriptEditor({
   startOpenImport = false,
 }: Props) {
   const [form, setForm] = useState<ScriptForm>(initial);
+  const [matchesText, setMatchesText] = useState(initial.matches.join("\n"));
   const [importOpen, setImportOpen] = useState(startOpenImport);
   const [pasted, setPasted] = useState("");
   const [importMsg, setImportMsg] = useState<{
     type: "ok" | "err";
     text: string;
   } | null>(null);
+
+  function set<K extends keyof ScriptForm>(key: K, value: ScriptForm[K]) {
+    setForm((f) => ({ ...f, [key]: value }));
+  }
+
+  function toggleGrant(g: string) {
+    const has = form.grants.includes(g);
+    let next = has ? form.grants.filter((x) => x !== g) : [...form.grants, g];
+    if (g === "none" && !has) next = ["none"];
+    if (g !== "none" && !has) next = next.filter((x) => x !== "none");
+    set("grants", next);
+  }
 
   function applyPaste() {
     const result = parseUserscript(pasted);
@@ -56,48 +97,29 @@ export default function ScriptEditor({
       return;
     }
     setForm(result.form);
+    setMatchesText(result.form.matches.join("\n"));
     setImportMsg({
       type: "ok",
       text: result.hadHeader
         ? "Cabecera leída y campos rellenados. Revísalos y guarda."
-        : "No se detectó cabecera ==UserScript==. El código se importó y se generará la cabecera al exportar.",
+        : "No se detectó cabecera ==UserScript==. El código se importó y la cabecera se generará al exportar.",
     });
   }
 
-  function set<K extends keyof ScriptForm>(key: K, value: ScriptForm[K]) {
-    setForm((f) => ({ ...f, [key]: value }));
+  function submit(e: React.FormEvent) {
+    e.preventDefault();
+    onSave({ ...form, matches: linesToArr(matchesText) });
   }
-
-  function toggleGrant(g: string) {
-    const current = form.grants
-      .split(/\r?\n/)
-      .map((s) => s.trim())
-      .filter(Boolean);
-    const has = current.includes(g);
-    const next = has ? current.filter((x) => x !== g) : [...current, g];
-    set("grants", next.join("\n"));
-  }
-
-  const activeGrants = form.grants
-    .split(/\r?\n/)
-    .map((s) => s.trim())
-    .filter(Boolean);
 
   return (
-    <form
-      onSubmit={(e) => {
-        e.preventDefault();
-        onSave(form);
-      }}
-      className="space-y-5"
-    >
+    <form onSubmit={submit} className="space-y-5">
       <div className="rounded-xl border border-indigo-500/30 bg-indigo-500/5">
         <button
           type="button"
           onClick={() => setImportOpen((v) => !v)}
           className="flex w-full items-center justify-between px-4 py-3 text-left"
         >
-          <span className="flex items-center gap-2 text-sm font-semibold">
+          <span className="flex flex-wrap items-center gap-2 text-sm font-semibold">
             📋 Pegar un script ya hecho
             <span className="text-xs font-normal text-slate-500">
               lee la cabecera y rellena todo solo
@@ -152,10 +174,12 @@ export default function ScriptEditor({
             )}
             <p className="text-xs text-slate-500">
               Pega un <code className="mono">.user.js</code> completo o solo el
-              código JS. Si trae cabecera se leen{" "}
-              <code className="mono">@name @match @grant @run-at</code>, etc. El
-              envoltorio <code className="mono">IIFE</code> se detecta para no
-              duplicarlo al exportar.
+              código JS. Se leen <code className="mono">@name @match @grant</code>
+              , <code className="mono">@run-at</code>,{" "}
+              <code className="mono">@updateURL</code>,{" "}
+              <code className="mono">@downloadURL</code>, etc. El envoltorio{" "}
+              <code className="mono">IIFE</code> se detecta para no duplicarlo al
+              exportar.
             </p>
           </div>
         )}
@@ -206,8 +230,8 @@ export default function ScriptEditor({
           <textarea
             className={`${inputCls} mono h-24 resize-y`}
             placeholder="*://*.example.com/*"
-            value={form.matches}
-            onChange={(e) => set("matches", e.target.value)}
+            value={matchesText}
+            onChange={(e) => setMatchesText(e.target.value)}
           />
         </Field>
         <Field label="@run-at">
@@ -225,10 +249,29 @@ export default function ScriptEditor({
         </Field>
       </div>
 
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <Field label="@updateURL (opcional)">
+          <input
+            className={inputCls}
+            value={form.updateUrl}
+            onChange={(e) => set("updateUrl", e.target.value)}
+            placeholder="https://.../script.user.js"
+          />
+        </Field>
+        <Field label="@downloadURL (opcional)">
+          <input
+            className={inputCls}
+            value={form.downloadUrl}
+            onChange={(e) => set("downloadUrl", e.target.value)}
+            placeholder="https://.../script.user.js"
+          />
+        </Field>
+      </div>
+
       <Field label="@grant">
         <div className="flex flex-wrap gap-2">
           {GRANT_OPTIONS.map((g) => {
-            const active = activeGrants.includes(g);
+            const active = form.grants.includes(g);
             return (
               <button
                 type="button"
@@ -260,8 +303,8 @@ export default function ScriptEditor({
       <label className="flex cursor-pointer items-center gap-3 rounded-lg border border-slate-700 bg-slate-800/50 p-3">
         <input
           type="checkbox"
-          checked={form.obfuscate}
-          onChange={(e) => set("obfuscate", e.target.checked)}
+          checked={form.obfuscateByDefault}
+          onChange={(e) => set("obfuscateByDefault", e.target.checked)}
           className="h-4 w-4 accent-indigo-500"
         />
         <span className="text-sm">
@@ -290,25 +333,5 @@ export default function ScriptEditor({
         </button>
       </div>
     </form>
-  );
-}
-
-const inputCls =
-  "w-full rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-sm outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/30";
-
-function Field({
-  label,
-  children,
-}: {
-  label: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <div>
-      <label className="mb-1 block text-xs font-medium text-slate-400">
-        {label}
-      </label>
-      {children}
-    </div>
   );
 }

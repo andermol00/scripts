@@ -10,33 +10,29 @@ const EMPTY: ScriptForm = {
   version: "1.0.0",
   description: "",
   author: "",
-  matches: "*://*/*",
-  grants: "none",
+  matches: ["*://*/*"],
+  grants: ["none"],
   runAt: "document-idle",
+  updateUrl: "",
+  downloadUrl: "",
   code: "console.log('Hola desde Tampervault');",
-  obfuscate: false,
+  obfuscateByDefault: false,
 };
 
 function toForm(s: ScriptRecord): ScriptForm {
-  const parse = (j: string) => {
-    try {
-      const a = JSON.parse(j);
-      return Array.isArray(a) ? a.join("\n") : "";
-    } catch {
-      return "";
-    }
-  };
   return {
     name: s.name,
     namespace: s.namespace,
     version: s.version,
     description: s.description,
     author: s.author,
-    matches: parse(s.matches),
-    grants: parse(s.grants),
+    matches: Array.isArray(s.matches) ? s.matches : [],
+    grants: Array.isArray(s.grants) ? s.grants : [],
     runAt: s.runAt,
+    updateUrl: s.updateUrl ?? "",
+    downloadUrl: s.downloadUrl ?? "",
     code: s.code,
-    obfuscate: s.obfuscate,
+    obfuscateByDefault: s.obfuscateByDefault,
   };
 }
 
@@ -206,7 +202,7 @@ export default function Dashboard({
                             <span className="mono rounded bg-slate-800 px-1.5 py-0.5 text-[10px] text-slate-400">
                               v{s.version}
                             </span>
-                            {s.obfuscate && (
+                            {s.obfuscateByDefault && (
                               <span className="rounded bg-amber-500/20 px-1.5 py-0.5 text-[10px] text-amber-300">
                                 ofuscado
                               </span>

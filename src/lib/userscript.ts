@@ -1,19 +1,10 @@
 import type { Script } from "@/db/schema";
 import { obfuscateCode } from "./obfuscate";
 
-function parseList(json: string): string[] {
-  try {
-    const v = JSON.parse(json);
-    return Array.isArray(v) ? v.filter((x) => typeof x === "string") : [];
-  } catch {
-    return [];
-  }
-}
-
 /** Build a complete Tampermonkey userscript from a stored record. */
 export function buildUserscript(script: Script): string {
-  const matches = parseList(script.matches);
-  const grants = parseList(script.grants);
+  const matches = script.matches ?? [];
+  const grants = script.grants ?? [];
 
   const lines: string[] = [];
   lines.push("// ==UserScript==");
@@ -32,13 +23,18 @@ export function buildUserscript(script: Script): string {
   } else {
     for (const g of grants) lines.push(`// @grant        ${g}`);
   }
+  if (script.updateUrl) lines.push(`// @updateURL    ${script.updateUrl}`);
+  if (script.downloadUrl)
+    lines.push(`// @downloadURL  ${script.downloadUrl}`);
   lines.push(`// @run-at       ${script.runAt}`);
   lines.push("// ==/UserScript==");
   lines.push("");
 
-  const body = script.obfuscate ? obfuscateCode(script.code) : script.code;
+  const body = script.obfuscateByDefault
+    ? obfuscateCode(script.code)
+    : script.code;
 
-  lines.push("(function() {");
+  lines.push("(function () {");
   lines.push("    'use strict';");
   lines.push("");
   lines.push(indent(body, 4));

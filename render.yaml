@@ -3,9 +3,11 @@ services:
     name: tampervault
     runtime: node
     plan: free
-    buildCommand: npm install && npm run build
+    # El init-db.mjs crea las tablas automáticamente (idempotente) antes de compilar.
+    buildCommand: npm install && node scripts/init-db.mjs && npm run build
     startCommand: npm run start
     healthCheckPath: /api/health
+    autoDeploy: true
     envVars:
       - key: NODE_ENV
         value: production
@@ -19,3 +21,4 @@ services:
 databases:
   - name: tampervault-db
     plan: free
+    postgresMajorVersion: 16

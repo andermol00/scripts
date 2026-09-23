@@ -28,15 +28,13 @@ Incluye un **login ultra-seguro** de un solo administrador.
 ```bash
 cp .env.example .env      # ajusta DATABASE_URL y SESSION_SECRET
 npm install
-npx drizzle-kit push      # crea las tablas
+node scripts/init-db.mjs  # crea las tablas (idempotente)
 npm run dev
 ```
 
 Abre http://localhost:3000, crea la cuenta de administrador y empieza a guardar scripts.
 
 ## Desplegar en Render.com desde GitHub
-
-### Opción A — Blueprint (recomendada)
 
 1. Sube este repositorio a GitHub.
 2. En Render, elige **New +** → **Blueprint** y apunta a tu repo.
@@ -46,49 +44,105 @@ Abre http://localhost:3000, crea la cuenta de administrador y empieza a guardar 
 
 > El healthcheck de Render usa `/api/health`.
 
-### Opción B — Web Service manual
+Si prefieres configurarlo a mano, crea un servicio Web con:
 
-Crea un **Web Service** apuntando a tu repo y usa los comandos por defecto de
-Node (`yarn install` / `yarn build` / `yarn start`) o bien:
+- **Build**: `npm install && npm run build`
+- **Start**: `npm run start`
+- Variables: `DATABASE_URL`, `SESSION_SECRET`, `NODE_ENV=production`
+- Tras conectar la base de datos, ejecuta `npx drizzle-kit push` una vez.
 
-- **Build Command**: `npm install && npm run build`
-- **Start Command**: `npm run start`
-- **Health Check Path**: `/api/health`
-- **Environment Variables**:
-  - `DATABASE_URL` → *Internal Connection String* de tu base PostgreSQL en Render
-  - `SESSION_SECRET` → una cadena larga y aleatoria (**obligatoria en producción**)
-  - `NODE_ENV` → `production`
+## Solución de problemas en Render
 
-### La base de datos se crea sola
+### `Module not found: Can't resolve 'jose'`
 
-`src/instrumentation.ts` se ejecuta al arrancar el servidor y crea las tablas
-si no existen (`CREATE TABLE IF NOT EXISTS`, idempotente). **No hace falta
-ejecutar `drizzle-kit push` a mano** contra la base de Render.
+Este error **no pertenece a esta versión del código**. Significa que el repo que
+subiste a GitHub contiene archivos de una versión anterior, por ejemplo:
 
-## Solución de problemas del deploy
-
-**`Module not found: Can't resolve 'jose'`**
-La dependencia `jose` debe estar declarada en `package.json` (ya lo está, en
-`dependencies`). Si clonaste o copiaste archivos a mano, vuelve a copiar el
-`package.json` del repo y haz commit antes de redesplegar:
-
-```bash
-npm install        # o yarn install
-git add package.json package-lock.json yarn.lock
-git commit -m "chore: declare jose dependency"
-git push
+```
+src/lib/session.ts            → import { SignJWT, jwtVerify } from "jose"
+src/lib/auth-guard.ts
+src/app/(app)/layout.tsx
+src/app/api/tools/obfuscate/route.ts
 ```
 
-**`info No lockfile found`** en Render → el repo no tiene `yarn.lock` ni
-`package-lock.json`. Añádelo y súbelo para builds reproducibles:
+Ninguno de esos archivos existe aquí: la versión actual **no usa `jose`**, las
+sesiones se firman con `node:crypto` (HMAC-SHA256) y se guardan en PostgreSQL.
+
+Tienes dos opciones:
+
+**Opción A — recomendada:** publica esta versión en GitHub. Borra los archivos
+viejos de tu repo (o crea uno nuevo) y sube el contenido actual:
 
 ```bash
-yarn install && git add yarn.lock && git commit -m "chore: lockfile" && git push
+git add -A
+git commit -m "Tampervault: versión actual"
+git push origin main
 ```
 
-**La app arranca pero el login da error 500** → revisa que `DATABASE_URL` y
-`SESSION_SECRET` estén definidas en el panel de Render y que la base esté
-enlazada al servicio. Revisa los **Logs** buscando `[db] bootstrap`.
+Render hará redeploy solo (`autoDeploy: true`).
+
+**Opción B:** si prefieres conservar esos archivos, instala la dependencia que
+les falta (ya está declarada en este `package.json`, pero si tu repo es otro,
+agrégala ahí):
+
+```bash
+npm install jose        # o: yarn add jose
+```
+
+> Ojo: tu build de Render usó **yarn** porque hay un `yarn.lock` en ese repo.
+> Este proyecto usa **npm** y no trae lockfile de yarn. Si dejas un `yarn.lock`
+> viejo junto con `package-lock.json`, Render puede instalar versiones
+> desincronizadas. Quédate con uno solo.
+
+### `Type error: Type 'string' is not assignable to type 'string[]'`
+
+Ocurre cuando el repo mezcla **dos generaciones** del proyecto: la UI nueva
+(`src/app/(app)/…`, `script-editor.tsx`, `script-list-item.tsx`) espera
+`matches: string[]`, `grants: string[]`, `updateUrl`, `downloadUrl` y
+`obfuscateByDefault`, mientras el schema viejo guardaba `matches`/`grants` como
+texto JSON y usaba el booleano `obfuscate`.
+
+En esta versión el modelo de datos ya está **unificado** y coincide con la UI:
+
+```ts
+// src/db/schema.ts
+matches: text("matches").array().notNull().default([]),
+grants: text("grants").array().notNull().default([]),
+updateUrl: text("update_url").notNull().default(""),
+downloadUrl: text("download_url").notNull().default(""),
+obfuscateByDefault: boolean("obfuscate_by_default").notNull().default(false),
+```
+
+`scripts/init-db.mjs` **migra automáticamente** las bases de datos que ya tenían
+el esquema anterior: convierte el texto JSON a `text[]` (conservando los datos),
+copia `obfuscate` → `obfuscate_by_default` y añade las columnas nuevas. Es
+idempotente, se puede ejecutar tantas veces como haga falta.
+
+Las API aceptan además `matches`/`grants` como array **o** como string JSON
+(retrocompatible con clientes viejos), y aceptan tanto `obfuscateByDefault` como
+`obfuscate`.
+
+> Si tu repo aún tiene las dos generaciones, borra los duplicados y quédate con
+> una sola UI. Archivos redundantes de la generación anterior:
+> `src/components/AuthGate.tsx`, `src/components/Dashboard.tsx`,
+> `src/components/ScriptEditor.tsx` (mayúsculas) frente a
+> `src/components/auth-gate.tsx`, `script-editor.tsx`, `script-list-item.tsx`
+> (minúsculas), y `src/app/page.tsx` frente a `src/app/(app)/page.tsx`
+> (dos páginas que resuelven a `/` rompen el build).
+
+### `relation "users" does not exist` / health check falla
+
+El build ya ejecuta `node scripts/init-db.mjs`, que crea todas las tablas de
+forma idempotente. Si necesitas recrearlas a mano:
+
+```bash
+node scripts/init-db.mjs     # sin prompts, seguro de repetir
+# o bien
+npx drizzle-kit push
+```
+
+Asegúrate de que la variable `DATABASE_URL` del servicio apunte a la base de
+datos de Render (el Blueprint la enlaza automáticamente).
 
 ## Stack
 

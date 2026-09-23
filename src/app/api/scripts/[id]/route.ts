@@ -2,22 +2,9 @@ import { db } from "@/db";
 import { scripts } from "@/db/schema";
 import { eq, and } from "drizzle-orm";
 import { getCurrentUser } from "@/lib/auth";
+import { toStringArray } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
-
-function normList(v: unknown): string {
-  if (Array.isArray(v)) {
-    return JSON.stringify(v.filter((x) => typeof x === "string" && x.trim()));
-  }
-  if (typeof v === "string") {
-    const arr = v
-      .split(/\r?\n/)
-      .map((s) => s.trim())
-      .filter(Boolean);
-    return JSON.stringify(arr);
-  }
-  return "[]";
-}
 
 async function owned(userId: number, id: number) {
   const rows = await db
@@ -65,11 +52,15 @@ export async function PUT(
       version: String(b?.version ?? existing.version),
       description: String(b?.description ?? existing.description),
       author: String(b?.author ?? existing.author),
-      matches: normList(b?.matches),
-      grants: normList(b?.grants),
+      matches: b?.matches === undefined ? existing.matches : toStringArray(b.matches),
+      grants: b?.grants === undefined ? existing.grants : toStringArray(b.grants),
       runAt: String(b?.runAt ?? existing.runAt),
+      updateUrl: String(b?.updateUrl ?? existing.updateUrl),
+      downloadUrl: String(b?.downloadUrl ?? existing.downloadUrl),
       code: String(b?.code ?? existing.code),
-      obfuscate: Boolean(b?.obfuscate),
+      obfuscateByDefault: Boolean(
+        b?.obfuscateByDefault ?? b?.obfuscate ?? existing.obfuscateByDefault,
+      ),
       updatedAt: new Date(),
     })
     .where(eq(scripts.id, existing.id))

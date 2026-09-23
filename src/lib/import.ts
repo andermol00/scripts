@@ -99,6 +99,8 @@ export function parseUserscript(raw: string): ImportResult {
       case "description":
       case "author":
       case "run-at":
+      case "updateurl":
+      case "downloadurl":
         if (value) meta[key] = value;
         break;
       default:
@@ -124,11 +126,13 @@ export function parseUserscript(raw: string): ImportResult {
       version: meta["version"] ?? "1.0.0",
       description: meta["description"] ?? "",
       author: meta["author"] ?? "",
-      matches: matches.length ? matches.join("\n") : "*://*/*",
-      grants: grants.length ? grants.join("\n") : "none",
+      matches: matches.length ? matches : ["*://*/*"],
+      grants: grants.length ? grants : ["none"],
       runAt: meta["run-at"] ?? "document-idle",
+      updateUrl: meta["updateurl"] ?? "",
+      downloadUrl: meta["downloadurl"] ?? "",
       code,
-      obfuscate: false,
+      obfuscateByDefault: false,
     },
   };
 }
