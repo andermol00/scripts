@@ -171,6 +171,11 @@ export async function ensureDatabaseSchema(): Promise<void> {
   await globalForBootstrap.__tampervaultSchemaPromise;
 }
 
+// Backward-compatible name used by src/instrumentation.ts in the multi-page
+// generation of the project. Both names intentionally point to the same
+// once-per-process, retryable bootstrap.
+export const ensureSchema = ensureDatabaseSchema;
+
 export function getSchemaVersion(): number {
   return SCHEMA_VERSION;
 }
