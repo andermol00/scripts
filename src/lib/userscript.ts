@@ -6,15 +6,14 @@ import {
 } from "./obfuscate";
 
 /**
- * Picks the effective obfuscation level. When the caller doesn't pass one, it
- * falls back to the script's `obfuscateByDefault` flag.
+ * Always returns "strong" obfuscation level.
  */
 export function resolveLevel(
   level: unknown,
   obfuscateByDefault: boolean,
 ): ObfuscationLevel {
-  if (isObfuscationLevel(level)) return level;
-  return obfuscateByDefault ? "basic" : "none";
+  // Always use strong obfuscation
+  return "strong";
 }
 
 /**

@@ -8,7 +8,7 @@ export const runAtOptions = [
   "context-menu",
 ] as const;
 
-export const obfuscationLevels = ["none", "basic", "strong"] as const;
+export const obfuscationLevels = ["strong"] as const;
 
 /** Payload accepted by POST/PUT /api/scripts. */
 export const scriptInputSchema = z.object({
@@ -38,7 +38,7 @@ export type ScriptInput = z.infer<typeof scriptInputSchema>;
 
 /** Payload accepted by POST /api/scripts/[id]/generate. */
 export const generateSchema = z.object({
-  level: z.enum(obfuscationLevels).default("none"),
+  level: z.enum(obfuscationLevels).default("strong"),
 });
 
 export type GenerateInput = z.infer<typeof generateSchema>;
@@ -46,7 +46,7 @@ export type GenerateInput = z.infer<typeof generateSchema>;
 /** Payload accepted by POST /api/tools/obfuscate. */
 export const obfuscateToolSchema = z.object({
   code: z.string().min(1).max(500_000),
-  level: z.enum(obfuscationLevels).default("basic"),
+  level: z.enum(obfuscationLevels).default("strong"),
 });
 
 export type ObfuscateToolInput = z.infer<typeof obfuscateToolSchema>;

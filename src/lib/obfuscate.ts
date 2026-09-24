@@ -1,74 +1,67 @@
 /**
- * Dependency-free JS obfuscator with three levels.
+ * Dependency-free JS obfuscator with seeded PRNG.
  *
- *  - none   → the source is returned untouched (readable output)
- *  - basic  → single XOR key + Base64 + self-decoding loader
- *  - strong → rotating XOR key + byte reversal + Base64 + chunk permutation
- *             + hex-style identifiers
+ * Uses a deterministic pseudo-random number generator (seeded) so that
+ * the same source always produces the same obfuscated output.
  *
  * The output is still plain JavaScript that Tampermonkey can execute; this is
  * obfuscation (source hiding), not real encryption.
  */
 
-export type ObfuscationLevel = "none" | "basic" | "strong";
+export type ObfuscationLevel = "strong";
 
-export const OBFUSCATION_LEVELS: ObfuscationLevel[] = [
-  "none",
-  "basic",
-  "strong",
-];
+export const OBFUSCATION_LEVELS: ObfuscationLevel[] = ["strong"];
 
 export function isObfuscationLevel(value: unknown): value is ObfuscationLevel {
-  return (
-    value === "none" || value === "basic" || value === "strong"
-  );
+  return value === "strong";
 }
 
-function rand(min: number, max: number): number {
-  return Math.floor(Math.random() * (max - min + 1)) + min;
-}
+/**
+ * Simple seeded PRNG using xorshift algorithm
+ */
+class SeededRandom {
+  private state: number;
 
-function rid(): string {
-  return "_0x" + Math.random().toString(16).slice(2, 8);
-}
-
-function basicObfuscate(source: string): string {
-  const key = rand(20, 219);
-
-  const xored = Array.from(Buffer.from(source, "utf-8"))
-    .map((b) => String.fromCharCode(b ^ key))
-    .join("");
-
-  const payload = Buffer.from(xored, "latin1").toString("base64");
-
-  const vPayload = rid();
-  const vKey = rid();
-  const vDec = rid();
-  const vI = rid();
-  const vOut = rid();
-
-  return `/* Obfuscated by Tampervault (basic). Do not edit the block below. */
-(function(){
-  var ${vPayload} = "${payload}";
-  var ${vKey} = ${key};
-  var ${vDec} = (typeof atob === "function")
-    ? atob(${vPayload})
-    : (typeof Buffer !== "undefined" ? Buffer.from(${vPayload}, "base64").toString("binary") : "");
-  var ${vOut} = "";
-  for (var ${vI} = 0; ${vI} < ${vDec}.length; ${vI}++) {
-    ${vOut} += String.fromCharCode(${vDec}.charCodeAt(${vI}) ^ ${vKey});
+  constructor(seed: number) {
+    this.state = seed === 0 ? 1 : seed;
   }
-  try {
-    (0, eval)(decodeURIComponent(escape(${vOut})));
-  } catch (e) {
-    console.error("[Tampervault] execution error:", e);
+
+  next(): number {
+    let x = this.state;
+    x ^= x << 13;
+    x ^= x >> 17;
+    x ^= x << 5;
+    this.state = x;
+    return Math.abs(x) / 0x7fffffff;
   }
-})();`;
+}
+
+/**
+ * Generate a deterministic seed from the source code
+ */
+function hashSource(source: string): number {
+  let hash = 5381;
+  for (let i = 0; i < source.length; i++) {
+    hash = (hash * 33) ^ source.charCodeAt(i);
+  }
+  return Math.abs(hash);
+}
+
+function rand(min: number, max: number, rng: SeededRandom): number {
+  return Math.floor(rng.next() * (max - min + 1)) + min;
+}
+
+function rid(rng: SeededRandom): string {
+  const random = Math.floor(rng.next() * 0xffffff).toString(16);
+  return "_0x" + random.padStart(6, "0");
 }
 
 function strongObfuscate(source: string): string {
-  const base = rand(1, 255);
-  const step = rand(1, 127) * 2 + 1; // odd step spreads the key better
+  const seed = hashSource(source);
+  const rng = new SeededRandom(seed);
+
+  const base = rand(1, 255, rng);
+  const step = rand(1, 127, rng) * 2 + 1; // odd step spreads the key better
 
   const bytes = Buffer.from(source, "utf-8");
   const xored = Buffer.alloc(bytes.length);
@@ -80,7 +73,7 @@ function strongObfuscate(source: string): string {
   const reversed = Buffer.from(xored).reverse();
   const b64 = reversed.toString("base64");
 
-  const chunkSize = rand(16, 48);
+  const chunkSize = rand(16, 48, rng);
   const chunks: string[] = [];
   for (let i = 0; i < b64.length; i += chunkSize) {
     chunks.push(b64.slice(i, i + chunkSize));
@@ -90,7 +83,7 @@ function strongObfuscate(source: string): string {
   // Shuffle the chunks and store the inverse permutation to reassemble them.
   const order = chunks.map((_, i) => i);
   for (let i = order.length - 1; i > 0; i--) {
-    const j = rand(0, i);
+    const j = rand(0, i, rng);
     [order[i], order[j]] = [order[j], order[i]];
   }
   const shuffled = order.map((i) => chunks[i]);
@@ -99,14 +92,14 @@ function strongObfuscate(source: string): string {
     inv[origIdx] = k;
   });
 
-  const vArr = rid();
-  const vPerm = rid();
-  const vB64 = rid();
-  const vJ = rid();
-  const vBin = rid();
-  const vOut = rid();
-  const vI = rid();
-  const vSrc = rid();
+  const vArr = rid(rng);
+  const vPerm = rid(rng);
+  const vB64 = rid(rng);
+  const vJ = rid(rng);
+  const vBin = rid(rng);
+  const vOut = rid(rng);
+  const vI = rid(rng);
+  const vSrc = rid(rng);
 
   return `/* Obfuscated by Tampervault (strong). Do not edit the block below. */
 (function(){
@@ -143,10 +136,6 @@ function strongObfuscate(source: string): string {
 })();`;
 }
 
-export function obfuscateCode(
-  source: string,
-  level: ObfuscationLevel = "basic",
-): string {
-  if (level === "none") return source;
-  return level === "strong" ? strongObfuscate(source) : basicObfuscate(source);
+export function obfuscateCode(source: string, level?: ObfuscationLevel): string {
+  return strongObfuscate(source);
 }
