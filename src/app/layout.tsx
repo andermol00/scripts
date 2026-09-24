@@ -3,9 +3,9 @@ import type { ReactNode } from "react";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Tampervault — Bóveda de scripts para Tampermonkey",
+  title: "Tampervault",
   description:
-    "Guarda tus scripts de Tampermonkey y genera userscripts (ofuscados o no) con un login ultra-seguro.",
+    "Bóveda de scripts para Tampermonkey. Guarda y ofusca tus userscripts con un login ultra-seguro.",
 };
 
 export default function RootLayout({ children }: { children: ReactNode }) {
