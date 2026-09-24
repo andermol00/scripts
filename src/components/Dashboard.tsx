@@ -41,8 +41,6 @@ type View =
   | { mode: "new"; importOpen: boolean }
   | { mode: "edit"; id: number };
 
-type Level = "none" | "basic" | "strong";
-
 export default function Dashboard({
   username,
   onLogout,
@@ -58,7 +56,6 @@ export default function Dashboard({
     null,
   );
   const [copied, setCopied] = useState(false);
-  const [level, setLevel] = useState<Level>("none");
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -100,11 +97,11 @@ export default function Dashboard({
     await load();
   }
 
-  async function showPreview(id: number, lvl: Level = level) {
+  async function showPreview(id: number) {
     const res = await fetch(`/api/scripts/${id}/generate`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ level: lvl }),
+      body: JSON.stringify({}),
     });
     if (!res.ok) {
       alert("No se pudo generar el script.");
@@ -135,11 +132,17 @@ export default function Dashboard({
       <header className="sticky top-0 z-10 border-b border-slate-800 bg-slate-950/80 backdrop-blur">
         <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-3">
           <div className="flex items-center gap-3">
-            <span className="text-2xl">🗄️</span>
+            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-indigo-500/20">
+              <svg className="h-6 w-6 text-indigo-400" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M12 2C6.48 2 2 6.48 2 12C2 17.52 6.48 22 12 22C17.52 22 22 17.52 22 12C22 6.48 17.52 2 12 2ZM12 4C16.41 4 20 7.59 20 12C20 16.41 16.41 20 12 20C7.59 20 4 16.41 4 12C4 7.59 7.59 4 12 4Z" fill="currentColor"/>
+                <path d="M13 12.5C13 13.33 12.33 14 11.5 14C10.67 14 10 13.33 10 12.5C10 11.67 10.67 11 11.5 11C12.33 11 13 11.67 13 12.5Z" fill="currentColor"/>
+                <path d="M15 6H9C7.9 6 7 6.9 7 8V16C7 17.1 7.9 18 9 18H15C16.1 18 17 17.1 17 16V8C17 6.9 16.1 6 15 6ZM15 16H9V8H15V16Z" fill="currentColor"/>
+              </svg>
+            </div>
             <div>
-              <h1 className="text-sm font-bold leading-tight">Tampervault</h1>
+              <h1 className="text-lg font-bold leading-tight">Tampervault</h1>
               <p className="text-xs text-slate-500">
-                Bóveda de userscripts · {username}
+                {username}
               </p>
             </div>
           </div>
@@ -234,7 +237,7 @@ export default function Dashboard({
                           Generar
                         </button>
                         <a
-                          href={`/api/scripts/${s.id}/raw?download=1&level=${level}`}
+                          href={`/api/scripts/${s.id}/raw?download=1`}
                           className="rounded-md bg-slate-800 px-3 py-1.5 text-xs text-slate-200 transition hover:bg-slate-700"
                         >
                           Descargar .user.js
@@ -261,23 +264,9 @@ export default function Dashboard({
             <section className="lg:sticky lg:top-20 lg:self-start">
               <div className="mb-4 flex items-center justify-between">
                 <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-400">
-                  Userscript generado
+                  Userscript generado (Ofuscado)
                 </h2>
                 <div className="flex items-center gap-2">
-                  <select
-                    value={level}
-                    onChange={(e) => {
-                      const next = e.target.value as Level;
-                      setLevel(next);
-                      if (preview) showPreview(preview.id, next);
-                    }}
-                    className="rounded-md border border-slate-700 bg-slate-800 px-2 py-1.5 text-xs outline-none focus:border-indigo-500"
-                    title="Nivel de ofuscación"
-                  >
-                    <option value="none">Sin ofuscar</option>
-                    <option value="basic">Ofuscado básico</option>
-                    <option value="strong">Ofuscado fuerte</option>
-                  </select>
                   {preview && (
                     <button
                       onClick={copyPreview}
