@@ -56,10 +56,7 @@ function rid(rng: SeededRandom): string {
   return "_0x" + random.padStart(6, "0");
 }
 
-function strongObfuscate(source: string): string {
-  const seed = hashSource(source);
-  const rng = new SeededRandom(seed);
-
+function strongObfuscate(source: string, rng: SeededRandom): string {
   const base = rand(1, 255, rng);
   const step = rand(1, 127, rng) * 2 + 1; // odd step spreads the key better
 
@@ -137,5 +134,7 @@ function strongObfuscate(source: string): string {
 }
 
 export function obfuscateCode(source: string, level?: ObfuscationLevel): string {
-  return strongObfuscate(source);
+  const seed = hashSource(source);
+  const rng = new SeededRandom(seed);
+  return strongObfuscate(source, rng);
 }
