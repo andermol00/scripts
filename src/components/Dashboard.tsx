@@ -200,7 +200,7 @@ export default function Dashboard({
               ) : scripts.length === 0 ? (
                 <div className="rounded-xl border border-dashed border-slate-700 p-8 text-center text-sm text-slate-500">
                   Aún no tienes scripts. Crea el primero con
-                  <span className="text-indigo-400"> “+ Nuevo script”</span>.
+                  <span className="text-indigo-400"> "+ Nuevo script"</span>.
                 </div>
               ) : (
                 <ul className="space-y-3">
@@ -283,7 +283,7 @@ export default function Dashboard({
                 </pre>
               ) : (
                 <div className="rounded-xl border border-dashed border-slate-700 p-8 text-center text-sm text-slate-500">
-                  Pulsa <span className="text-indigo-400">“Generar”</span> en un
+                  Pulsa <span className="text-indigo-400">"Generar"</span> en un
                   script para ver aquí el userscript listo para pegar en
                   Tampermonkey.
                 </div>
