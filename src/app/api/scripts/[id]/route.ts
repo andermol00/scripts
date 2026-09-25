@@ -1,84 +1,68 @@
+import { NextRequest } from "next/server";
+import { getSession } from "@/lib/auth";
 import { db } from "@/db";
 import { scripts } from "@/db/schema";
+import { scriptInputSchema } from "@/lib/validation";
 import { eq, and } from "drizzle-orm";
-import { getCurrentUser } from "@/lib/auth";
-import { toStringArray } from "@/lib/types";
-
-export const dynamic = "force-dynamic";
-
-async function owned(userId: number, id: number) {
-  const rows = await db
-    .select()
-    .from(scripts)
-    .where(and(eq(scripts.id, id), eq(scripts.userId, userId)))
-    .limit(1);
-  return rows[0] ?? null;
-}
-
-export async function GET(
-  _req: Request,
-  { params }: { params: Promise<{ id: string }> },
-) {
-  const user = await getCurrentUser();
-  if (!user) return Response.json({ error: "No autorizado" }, { status: 401 });
-  const { id } = await params;
-  const script = await owned(user.id, Number(id));
-  if (!script) return Response.json({ error: "No encontrado" }, { status: 404 });
-  return Response.json({ script });
-}
+import { incrementVersion } from "@/lib/userscript";
 
 export async function PUT(
-  req: Request,
-  { params }: { params: Promise<{ id: string }> },
+  req: NextRequest,
+  { params }: { params: { id: string } }
 ) {
-  const user = await getCurrentUser();
-  if (!user) return Response.json({ error: "No autorizado" }, { status: 401 });
-  const { id } = await params;
-  const existing = await owned(user.id, Number(id));
-  if (!existing)
-    return Response.json({ error: "No encontrado" }, { status: 404 });
+  const session = await getSession();
+  if (!session) {
+    return Response.json({ error: "Unauthorized" }, { status: 401 });
+  }
 
-  const b = await req.json().catch(() => null);
-  const name = String(b?.name ?? existing.name).trim();
-  if (!name) {
-    return Response.json({ error: "El nombre es obligatorio." }, { status: 400 });
+  const scriptId = parseInt(params.id);
+  const body = await req.json();
+  const parsed = scriptInputSchema.parse(body);
+
+  const existing = await db.query.scripts.findFirst({
+    where: (t, { eq, and }) =>
+      and(eq(t.id, scriptId), eq(t.userId, session.userId)),
+  });
+
+  if (!existing) {
+    return Response.json({ error: "Not found" }, { status: 404 });
+  }
+
+  // ✨ AUTO-UPDATE: Incrementar versión si el código cambió
+  let newVersion = existing.version;
+  if (parsed.code !== existing.code) {
+    newVersion = incrementVersion(existing.version);
   }
 
   const [updated] = await db
     .update(scripts)
     .set({
-      name,
-      namespace: String(b?.namespace ?? existing.namespace),
-      version: String(b?.version ?? existing.version),
-      description: String(b?.description ?? existing.description),
-      author: String(b?.author ?? existing.author),
-      matches: b?.matches === undefined ? existing.matches : toStringArray(b.matches),
-      grants: b?.grants === undefined ? existing.grants : toStringArray(b.grants),
-      runAt: String(b?.runAt ?? existing.runAt),
-      updateUrl: String(b?.updateUrl ?? existing.updateUrl),
-      downloadUrl: String(b?.downloadUrl ?? existing.downloadUrl),
-      code: String(b?.code ?? existing.code),
-      obfuscateByDefault: Boolean(
-        b?.obfuscateByDefault ?? b?.obfuscate ?? existing.obfuscateByDefault,
-      ),
+      ...parsed,
+      version: newVersion,
       updatedAt: new Date(),
     })
-    .where(eq(scripts.id, existing.id))
+    .where(eq(scripts.id, scriptId))
     .returning();
 
   return Response.json({ script: updated });
 }
 
 export async function DELETE(
-  _req: Request,
-  { params }: { params: Promise<{ id: string }> },
+  req: NextRequest,
+  { params }: { params: { id: string } }
 ) {
-  const user = await getCurrentUser();
-  if (!user) return Response.json({ error: "No autorizado" }, { status: 401 });
-  const { id } = await params;
-  const existing = await owned(user.id, Number(id));
-  if (!existing)
-    return Response.json({ error: "No encontrado" }, { status: 404 });
-  await db.delete(scripts).where(eq(scripts.id, existing.id));
-  return Response.json({ ok: true });
+  const session = await getSession();
+  if (!session) {
+    return Response.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  const scriptId = parseInt(params.id);
+
+  await db
+    .delete(scripts)
+    .where(
+      and(eq(scripts.id, scriptId), eq(scripts.userId, session.userId))
+    );
+
+  return Response.json({ success: true });
 }
