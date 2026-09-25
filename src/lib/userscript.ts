@@ -12,23 +12,50 @@ export function resolveLevel(
   level: unknown,
   obfuscateByDefault: boolean,
 ): ObfuscationLevel {
-  // Always use strong obfuscation
   return "strong";
+}
+
+/**
+ * Increment version automatically when script changes
+ * @param version - Current version (e.g., "1.0.0")
+ * @returns Incremented version (e.g., "1.0.1")
+ */
+export function incrementVersion(version: string): string {
+  const parts = version.split(".");
+  if (parts.length < 3) {
+    // Fallback if version is malformed
+    return version + ".1";
+  }
+
+  // Increment patch version (last number)
+  const patch = parseInt(parts[parts.length - 1], 10);
+  if (isNaN(patch)) {
+    parts[parts.length - 1] = "1";
+  } else {
+    parts[parts.length - 1] = String(patch + 1);
+  }
+
+  return parts.join(".");
 }
 
 /**
  * Build a complete Tampermonkey userscript from a stored record.
  *
- * @param script stored row
- * @param level  optional obfuscation level ("none" | "basic" | "strong")
+ * @param script - Stored script record
+ * @param level - Obfuscation level (always "strong")
+ * @param baseUrl - Base URL for @updateURL and @downloadURL (from environment or parameter)
  */
 export function buildUserscript(
   script: Script,
   level?: ObfuscationLevel | string,
+  baseUrl?: string,
 ): string {
   const matches = script.matches ?? [];
   const grants = script.grants ?? [];
   const chosen = resolveLevel(level, script.obfuscateByDefault);
+
+  // Get base URL from environment or parameter
+  const publicUrl = baseUrl || process.env.TAMPERVAULT_PUBLIC_URL || "";
 
   const lines: string[] = [];
   lines.push("// ==UserScript==");
@@ -47,6 +74,14 @@ export function buildUserscript(
   } else {
     for (const g of grants) lines.push(`// @grant        ${g}`);
   }
+  
+  // ✨ AUTO-UPDATE: Add updateURL and downloadURL automatically
+  if (publicUrl) {
+    const updateUrl = `${publicUrl.replace(/\/$/, "")}/api/scripts/${script.id}/raw`;
+    lines.push(`// @updateURL    ${updateUrl}`);
+    lines.push(`// @downloadURL  ${updateUrl}`);
+  }
+  
   if (script.updateUrl) lines.push(`// @updateURL    ${script.updateUrl}`);
   if (script.downloadUrl)
     lines.push(`// @downloadURL  ${script.downloadUrl}`);
