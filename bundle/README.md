@@ -1,0 +1,53 @@
+# Tampervault
+
+Bóveda privada (Next.js 16 + Drizzle + PostgreSQL) para almacenar, versionar,
+sincronizar y distribuir userscripts de Tampermonkey. El acceso se protege con
+PIN de 6 dígitos, bloqueo progresivo y recuperación por contraseña.
+
+## Estructura
+
+```
+src/
+├── app/
+│   ├── page.tsx                        # Login con PIN
+│   ├── dashboard/page.tsx              # Bóveda (protegida por sesión)
+│   └── api/
+│       ├── auth/pin/route.ts           # POST login con PIN / recuperación
+│       ├── auth/logout/route.ts        # POST cerrar sesión
+│       ├── auth/credentials/route.ts   # POST cambiar PIN / contraseña
+│       ├── health/route.ts             # GET healthcheck
+│       └── scripts/
+│           ├── route.ts                # GET lista · POST crear
+│           ├── [id]/route.ts           # GET · PATCH · DELETE
+│           ├── [id]/download/route.ts  # GET *.user.js (?obfuscate=1)
+│           └── check-updates/route.ts  # POST revisar todos · GET ?id=
+├── components/{pin-login,script-manager}.tsx
+├── db/{schema,index,bootstrap,seed}.ts
+└── lib/{auth,session,scripts,obfuscate}.ts
+```
+
+## Puesta en marcha
+
+1. `cp .env.example .env` y completa `DATABASE_URL` + `SESSION_SECRET`.
+2. `npm install`
+3. Crea el esquema: `npm run db:init` (o `npx drizzle-kit push`).
+4. Crea el usuario inicial: `npm run db:seed` → usuario `admin`, PIN `123456`,
+   contraseña `tampervault` (cámbialos desde el panel).
+5. `npm run dev` y abre `http://localhost:3000`.
+
+## Seguridad
+
+- PIN y contraseña se guardan con scrypt (`scrypt$N$salt$hash`).
+- Sesiones en base de datos: solo se guarda el SHA-256 del token; la cookie es
+  `httpOnly`, `sameSite=lax` y `secure` en producción.
+- 3 intentos de PIN por IP → bloqueo de 5 minutos + contraseña obligatoria
+  durante 10 minutos. Cada intento queda registrado en `login_events`.
+- La API de scripts siempre filtra por `user_id` de la sesión activa.
+- La descarga remota bloquea hosts internos y limita la respuesta a 2 MB.
+
+## Despliegue en Vercel
+
+1. Sube el repo a GitHub e impórtalo en Vercel.
+2. Añade las variables `DATABASE_URL` y `SESSION_SECRET`.
+3. `vercel.json` ejecuta `npm run build && node scripts/init-db.mjs`, así que el
+   esquema se crea automáticamente en cada despliegue.

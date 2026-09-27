@@ -1,0 +1,11 @@
+@import "tailwindcss";
+
+:root {
+  color-scheme: dark;
+}
+
+textarea,
+input,
+select {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
