@@ -8,23 +8,39 @@ import {
   index,
 } from "drizzle-orm/pg-core";
 
-// Single-tenant admin auth. Registration is locked after the first user
-// is created (see /api/auth/setup).
 export const users = pgTable("users", {
   id: serial("id").primaryKey(),
   username: text("username").notNull().unique(),
-  // Format: scrypt$N$salt$hash (all hex/base64)
   passwordHash: text("password_hash").notNull(),
-  // Optional TOTP secret (base32) for 2FA
+  // PIN de 6 dígitos en hash (scrypt)
+  pinHash: text("pin_hash"),
   totpSecret: text("totp_secret"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
+
+export const pinAttempts = pgTable(
+  "pin_attempts",
+  {
+    id: serial("id").primaryKey(),
+    userId: integer("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    ip: text("ip").notNull(),
+    attempts: integer("attempts").notNull().default(0), // contador de intentos
+    lockedUntil: timestamp("locked_until"), // bloqueo después de 3 intentos
+    passwordRequiredAt: timestamp("password_required_at"), // pedir contraseña en 5 min
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+  },
+  (t) => ({
+    userIdIdx: index("pin_attempts_user_id_idx").on(t.userId),
+    ipIdx: index("pin_attempts_ip_idx").on(t.ip),
+  }),
+);
 
 export const sessions = pgTable(
   "sessions",
   {
     id: serial("id").primaryKey(),
-    // SHA-256 of the raw session token (never store the raw token)
     tokenHash: text("token_hash").notNull().unique(),
     userId: integer("user_id")
       .notNull()
@@ -39,13 +55,6 @@ export const sessions = pgTable(
   }),
 );
 
-/**
- * Supports two complementary strategies:
- *  - simple IP-based counting (ip / username / success / created_at)
- *  - exponential lockout keyed by a hashed ip::username `identifier`
- *    (attempts / locked_until / last_attempt_at)
- * All the extra columns are nullable or defaulted so either writer works.
- */
 export const loginAttempts = pgTable(
   "login_attempts",
   {
@@ -53,7 +62,6 @@ export const loginAttempts = pgTable(
     ip: text("ip").notNull().default(""),
     username: text("username"),
     success: boolean("success").notNull().default(false),
-    // SHA-256 of `${ip}::${username}` — never store the raw pair.
     identifier: text("identifier"),
     attempts: integer("attempts").notNull().default(0),
     lockedUntil: timestamp("locked_until"),
@@ -66,7 +74,6 @@ export const loginAttempts = pgTable(
   }),
 );
 
-/** Audit trail of every login outcome (used by the rate limiter). */
 export const loginEvents = pgTable(
   "login_events",
   {
@@ -91,18 +98,23 @@ export const scripts = pgTable("scripts", {
   version: text("version").notNull().default("1.0.0"),
   description: text("description").notNull().default(""),
   author: text("author").notNull().default(""),
-  // Native Postgres arrays of @match patterns / @grant values
   matches: text("matches").array().notNull().default([]),
   grants: text("grants").array().notNull().default([]),
   runAt: text("run_at").notNull().default("document-idle"),
   updateUrl: text("update_url").notNull().default(""),
   downloadUrl: text("download_url").notNull().default(""),
   code: text("code").notNull().default(""),
-  // Whether generated output is obfuscated by default
   obfuscateByDefault: boolean("obfuscate_by_default").notNull().default(false),
+  // NUEVO: hash del código para detectar cambios
+  codeHash: text("code_hash").notNull().default(""),
+  // NUEVO: URL de origen (si es externa)
+  sourceUrl: text("source_url"),
+  // NUEVO: última vez que se verificó actualización
+  lastCheckAt: timestamp("last_check_at"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });
 
 export type User = typeof users.$inferSelect;
 export type Script = typeof scripts.$inferSelect;
+export type PinAttempt = typeof pinAttempts.$inferSelect;
