@@ -1,0 +1,30 @@
+{
+  "buildCommand": "npm run build && node scripts/init-db.mjs",
+  "env": {
+    "DATABASE_URL": {
+      "description": "PostgreSQL connection string (Neon)"
+    },
+    "SESSION_SECRET": {
+      "description": "Random 32+ char secret for session signing"
+    },
+    "NODE_ENV": {
+      "value": "production"
+    }
+  },
+  "functions": {
+    "src/app/api/**/*.ts": {
+      "maxDuration": 30
+    }
+  },
+  "headers": [
+    {
+      "source": "/api/health",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "public, max-age=60"
+        }
+      ]
+    }
+  ]
+}
