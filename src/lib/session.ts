@@ -1,26 +1,36 @@
-import { SignJWT, jwtVerify } from "jose";
+import { createHmac, randomBytes } from "node:crypto";
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 
-const SECRET = new TextEncoder().encode(
-  process.env.SESSION_SECRET || "dev-secret-key-min-32-characters-long"
-);
+const SECRET = process.env.SESSION_SECRET || "dev-secret-key-min-32-characters-long";
 
-export async function createSessionToken(userId: number): Promise<string> {
-  const jwt = await new SignJWT({ userId, iat: Date.now() })
-    .setProtectedHeader({ alg: "HS256" })
-    .setExpirationTime("12h")
-    .sign(SECRET);
-
-  return jwt;
+export function createSessionToken(userId: number): string {
+  const timestamp = Date.now();
+  const random = randomBytes(16).toString("hex");
+  const data = `${userId}.${timestamp}.${random}`;
+  const signature = createHmac("sha256", SECRET)
+    .update(data)
+    .digest("hex");
+  return `${data}.${signature}`;
 }
 
-export async function verifySessionToken(
-  token: string
-): Promise<{ userId: number } | null> {
+export function verifySessionToken(token: string): { userId: number } | null {
   try {
-    const verified = await jwtVerify(token, SECRET);
-    return verified.payload as { userId: number };
+    const parts = token.split(".");
+    if (parts.length !== 4) return null;
+
+    const [userIdStr, timestamp, random, signature] = parts;
+    const data = `${userIdStr}.${timestamp}.${random}`;
+    const expectedSignature = createHmac("sha256", SECRET)
+      .update(data)
+      .digest("hex");
+
+    if (signature !== expectedSignature) return null;
+
+    const ts = parseInt(timestamp, 10);
+    if (Date.now() - ts > 12 * 60 * 60 * 1000) return null;
+
+    return { userId: parseInt(userIdStr, 10) };
   } catch {
     return null;
   }
