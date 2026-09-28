@@ -45,6 +45,18 @@ src/
 - La API de scripts siempre filtra por `user_id` de la sesión activa.
 - La descarga remota bloquea hosts internos y limita la respuesta a 2 MB.
 
+## Diagnóstico
+
+- `GET /api/health` devuelve `{ ok, configured, reachable, error?, hint? }`. Si la base
+  no responde, el `hint` dice exactamente qué revisar (URL, credenciales, host...).
+- Si `DATABASE_URL` falta o el host no responde, el login devuelve **503** con ese
+  mensaje en vez de un 500 genérico, y la pantalla `/` muestra un aviso de
+  "Configuración pendiente" en lugar de un formulario roto.
+- `src/db/bootstrap.ts` (`ensureSchema`) crea las tablas en el primer request, así que
+  no hace falta ejecutar `db:init` a mano tras desplegar.
+- `src/data/bundle-manifest.json` contiene el texto de todos los archivos del repo y
+  alimenta la pantalla `/descargar` y `GET /api/download/zip`.
+
 ## Despliegue en Vercel
 
 1. Sube el repo a GitHub e impórtalo en Vercel.

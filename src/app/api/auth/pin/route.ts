@@ -5,6 +5,7 @@ import { loginEvents, pinAttempts, users } from "@/db/schema";
 import { isValidPin, normalizeIp, verifySecret } from "@/lib/auth";
 import { createSession, setSessionCookie } from "@/lib/session";
 import { ensureSeed } from "@/db/seed";
+import { getDbStatus } from "@/lib/diagnostics";
 
 export const dynamic = "force-dynamic";
 
@@ -20,6 +21,18 @@ type PinBody = {
 
 export async function POST(req: NextRequest) {
   try {
+    const dbStatus = await getDbStatus();
+    if (!dbStatus.reachable) {
+      return NextResponse.json(
+        {
+          error: dbStatus.error ?? "La base de datos no responde",
+          hint: dbStatus.hint,
+          config: true,
+        },
+        { status: 503 },
+      );
+    }
+
     await ensureSeed();
 
     const body = (await req.json().catch(() => ({}))) as PinBody;

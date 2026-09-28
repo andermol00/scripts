@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/session";
+import { getDbStatus } from "@/lib/diagnostics";
 import { ScriptManager } from "@/components/script-manager";
 import { db } from "@/db";
 import { scripts } from "@/db/schema";
@@ -10,6 +11,9 @@ export const dynamic = "force-dynamic";
 export default async function DashboardPage() {
   const user = await getCurrentUser();
   if (!user) redirect("/");
+
+  const dbStatus = await getDbStatus();
+  if (!dbStatus.reachable) redirect("/");
 
   const rows = await db
     .select()

@@ -50,6 +50,14 @@ const META: Record<string, { group: string; language: string; description: strin
 };
 
 function metaFor(relPath: string) {
+  if (relPath === "src/data/bundle-manifest.json") {
+    return {
+      group: "src/data/",
+      language: "json",
+      description: "Contenido de todos los archivos del repo (usado por /descargar)",
+    };
+  }
+
   const custom = META[relPath];
   if (custom) return custom;
   if (relPath.startsWith("scripts/")) {
@@ -155,7 +163,16 @@ async function walk(dir: string, base = ""): Promise<string[]> {
 }
 
 function allPaths(fsPaths: string[]): string[] {
-  const merged = new Set([...Object.keys(manifest as Record<string, string>), ...fsPaths]);
+  // El manifiesto se genera al vuelo (ver readBundleFile): nunca se lista a sí
+  // mismo, porque se auto-incluiría y crecería en cada regeneración.
+  const skip = new Set(["src/data/bundle-manifest.json"]);
+  const candidates = [
+    ...Object.keys(manifest as Record<string, string>),
+    ...fsPaths,
+    "src/data/bundle-manifest.json",
+  ].filter((path) => !skip.has(path) || path === "src/data/bundle-manifest.json");
+  const merged = new Set(candidates);
+
   return [...merged].sort((a, b) => {
     const rank = (value: string) => (value.includes("/") ? 1 : 0);
     if (rank(a) !== rank(b)) return rank(a) - rank(b);
@@ -189,6 +206,16 @@ export type BundleFileContent = { path: string; content: string; size: number };
 export async function readBundleFile(relPath: string): Promise<BundleFileContent | null> {
   const normalized = relPath.replace(/\\/g, "/").replace(/^\/+/, "");
   if (!normalized || normalized.split("/").includes("..")) return null;
+
+  // Se genera al vuelo para que nunca quede desfasado ni se auto-referencie.
+  if (normalized === "src/data/bundle-manifest.json") {
+    const generated = `${JSON.stringify(manifest, null, 2)}\n`;
+    return {
+      path: normalized,
+      content: generated,
+      size: Buffer.byteLength(generated, "utf8"),
+    };
+  }
 
   const embedded = manifestContent(normalized);
   if (embedded !== null) {
