@@ -2,6 +2,39 @@ import { sha256 } from "@/lib/auth";
 import { buildUserscriptHeader, obfuscateScript } from "@/lib/obfuscate";
 import type { Script } from "@/db/schema";
 
+export type ScriptInput = {
+  name?: unknown;
+  namespace?: unknown;
+  version?: unknown;
+  description?: unknown;
+  author?: unknown;
+  matches?: unknown;
+  grants?: unknown;
+  runAt?: unknown;
+  updateUrl?: unknown;
+  downloadUrl?: unknown;
+  code?: unknown;
+  sourceUrl?: unknown;
+  obfuscateByDefault?: unknown;
+};
+
+export function toStringList(value: unknown): string[] {
+  if (Array.isArray(value)) {
+    return value.map((v) => String(v).trim()).filter((v) => v.length > 0);
+  }
+  if (typeof value === "string") {
+    return value
+      .split(/[\n,]/)
+      .map((v) => v.trim())
+      .filter((v) => v.length > 0);
+  }
+  return [];
+}
+
+export function asString(value: unknown, fallback = ""): string {
+  return typeof value === "string" ? value : fallback;
+}
+
 export const RUN_AT_OPTIONS = [
   "document-start",
   "document-body",
@@ -9,24 +42,7 @@ export const RUN_AT_OPTIONS = [
   "document-idle",
 ] as const;
 
-function asString(value: unknown, fallback = ""): string {
-  return typeof value === "string" ? value : fallback;
-}
-
-export function toStringList(value: unknown): string[] {
-  if (Array.isArray(value)) {
-    return value.map((v) => String(v).trim()).filter(Boolean);
-  }
-  if (typeof value === "string") {
-    return value
-      .split(/[\n,]/)
-      .map((v) => v.trim())
-      .filter(Boolean);
-  }
-  return [];
-}
-
-export function normalizeScriptInput(input: Record<string, unknown>) {
+export function normalizeScriptInput(input: ScriptInput) {
   const runAt = asString(input.runAt, "document-idle");
   return {
     name: asString(input.name, "Script sin nombre").slice(0, 160),
@@ -49,11 +65,6 @@ export function scriptHash(code: string): string {
   return sha256(code);
 }
 
-export function renderUserScript(script: Script, obfuscated: boolean): string {
-  const header = buildUserscriptHeader(script);
-  return obfuscated ? obfuscateScript(script.code, header) : `${header}${script.code}\n`;
-}
-
 export async function fetchRemoteCode(
   url: string,
 ): Promise<{ ok: true; code: string } | { ok: false; error: string }> {
@@ -62,7 +73,12 @@ export async function fetchRemoteCode(
     if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
       return { ok: false, error: "Solo se permiten URLs http/https" };
     }
-    if (["localhost", "127.0.0.1", "0.0.0.0"].includes(parsed.hostname)) {
+    if (
+      parsed.hostname === "localhost" ||
+      parsed.hostname === "127.0.0.1" ||
+      parsed.hostname.startsWith("10.") ||
+      parsed.hostname.startsWith("192.168.")
+    ) {
       return { ok: false, error: "URL interna bloqueada por seguridad" };
     }
 
@@ -73,14 +89,26 @@ export async function fetchRemoteCode(
       cache: "no-store",
     });
 
-    if (!response.ok) return { ok: false, error: `El servidor respondio ${response.status}` };
+    if (!response.ok) {
+      return { ok: false, error: `El servidor respondio ${response.status}` };
+    }
 
     const text = await response.text();
-    if (text.length > 2_000_000) return { ok: false, error: "El archivo supera 2 MB" };
+    if (text.length > 2_000_000) {
+      return { ok: false, error: "El archivo remoto supera 2 MB" };
+    }
     return { ok: true, code: text };
   } catch (error) {
     return { ok: false, error: (error as Error).message || "Fallo la descarga" };
   }
+}
+
+export function renderUserScript(script: Script, obfuscated: boolean): string {
+  const header = buildUserscriptHeader(script);
+  if (!obfuscated) {
+    return `${header}${script.code}\n`;
+  }
+  return obfuscateScript(script.code, header);
 }
 
 export function publicScript(script: Script) {

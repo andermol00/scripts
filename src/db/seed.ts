@@ -1,6 +1,7 @@
 import { db } from "@/db";
 import { scripts, users } from "@/db/schema";
 import { hashSecret, sha256 } from "@/lib/auth";
+import { ensureSchema } from "@/db/bootstrap";
 
 export const DEFAULT_USERNAME = "admin";
 export const DEFAULT_PASSWORD = "tampervault";
@@ -17,6 +18,8 @@ export async function ensureSeed(): Promise<void> {
   seeded = true;
 
   try {
+    await ensureSchema();
+
     const existing = await db.select({ id: users.id }).from(users).limit(1);
     if (existing.length > 0) return;
 

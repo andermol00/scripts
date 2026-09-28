@@ -6,19 +6,29 @@ import {
 } from "node:crypto";
 import { promisify } from "node:util";
 
+type ScryptOptions = { N: number; r: number; p: number };
+
 const scrypt = promisify(scryptCallback) as (
   password: string,
   salt: Buffer,
   keylen: number,
-  options: { N: number; r: number; p: number },
+  options: ScryptOptions,
 ) => Promise<Buffer>;
 
 const SCRYPT_N = 16384;
+const KEY_LENGTH = 64;
 
-/** Formato: scrypt$<N>$<salt-hex>$<hash-hex> */
+/**
+ * Hash a secret (password or PIN) with scrypt.
+ * Format: scrypt$<N>$<salt-hex>$<hash-hex>
+ */
 export async function hashSecret(secret: string): Promise<string> {
   const salt = randomBytes(16);
-  const derived = await scrypt(secret, salt, 64, { N: SCRYPT_N, r: 8, p: 1 });
+  const derived = await scrypt(secret, salt, KEY_LENGTH, {
+    N: SCRYPT_N,
+    r: 8,
+    p: 1,
+  });
   return `scrypt$${SCRYPT_N}$${salt.toString("hex")}$${derived.toString("hex")}`;
 }
 
@@ -36,7 +46,11 @@ export async function verifySecret(
   try {
     const salt = Buffer.from(parts[2], "hex");
     const expected = Buffer.from(parts[3], "hex");
-    const derived = await scrypt(secret, salt, expected.length, { N: n, r: 8, p: 1 });
+    const derived = await scrypt(secret, salt, expected.length, {
+      N: n,
+      r: 8,
+      p: 1,
+    });
     if (derived.length !== expected.length) return false;
     return timingSafeEqual(derived, expected);
   } catch {

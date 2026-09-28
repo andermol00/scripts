@@ -84,8 +84,10 @@ CREATE TABLE IF NOT EXISTS scripts (
 
 async function initDb() {
   if (!process.env.DATABASE_URL) {
-    console.error("DATABASE_URL no esta definida");
-    process.exit(1);
+    // En Vercel las variables de entorno pueden no existir durante el build:
+    // no rompemos el deploy, el esquema se crea en el primer request.
+    console.warn("[init-db] DATABASE_URL no definida, se omite (se creara en runtime)");
+    return;
   }
 
   const client = new Client({ connectionString: process.env.DATABASE_URL });

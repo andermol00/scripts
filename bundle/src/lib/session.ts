@@ -1,6 +1,6 @@
 import { cookies } from "next/headers";
 import type { NextResponse } from "next/server";
-import { and, eq, gt, lt } from "drizzle-orm";
+import { and, eq, gt, lt, or } from "drizzle-orm";
 import { db } from "@/db";
 import { sessions, users, type User } from "@/db/schema";
 import { generateToken, sha256 } from "@/lib/auth";
@@ -23,7 +23,9 @@ export async function createSession(
     expiresAt,
   });
 
+  // Limpieza oportunista de sesiones caducadas.
   await db.delete(sessions).where(lt(sessions.expiresAt, new Date()));
+
   return token;
 }
 
@@ -56,7 +58,6 @@ export async function getSessionToken(): Promise<string | null> {
   return store.get(SESSION_COOKIE)?.value ?? null;
 }
 
-/** Devuelve el usuario de la sesion activa o null. */
 export async function getCurrentUser(): Promise<User | null> {
   const token = await getSessionToken();
   if (!token) return null;
@@ -77,4 +78,14 @@ export async function destroyCurrentSession(): Promise<void> {
   const token = await getSessionToken();
   if (!token) return;
   await db.delete(sessions).where(eq(sessions.tokenHash, sha256(token)));
+}
+
+export async function countActiveSessions(userId: number): Promise<number> {
+  const rows = await db
+    .select({ id: sessions.id })
+    .from(sessions)
+    .where(
+      and(eq(sessions.userId, userId), or(gt(sessions.expiresAt, new Date()))),
+    );
+  return rows.length;
 }

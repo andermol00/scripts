@@ -21,7 +21,6 @@ async function seed() {
     console.error("DATABASE_URL no esta definida");
     process.exit(1);
   }
-
   const client = new Client({ connectionString: process.env.DATABASE_URL });
   try {
     await client.connect();

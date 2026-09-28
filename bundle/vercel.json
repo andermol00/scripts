@@ -1,5 +1,5 @@
 {
-  "buildCommand": "npm run build && node scripts/init-db.mjs",
+  "buildCommand": "npm run build",
   "framework": "nextjs",
   "regions": ["iad1"]
 }

@@ -48,6 +48,17 @@ src/
 ## Despliegue en Vercel
 
 1. Sube el repo a GitHub e impórtalo en Vercel.
-2. Añade las variables `DATABASE_URL` y `SESSION_SECRET`.
-3. `vercel.json` ejecuta `npm run build && node scripts/init-db.mjs`, así que el
-   esquema se crea automáticamente en cada despliegue.
+2. Añade las variables `DATABASE_URL` y `SESSION_SECRET` (Project → Settings →
+   Environment Variables). **Sin `DATABASE_URL` el build falla con
+   `DATABASE_URL is required`**: el pool de Postgres se crea de forma perezosa, así
+   que el módulo se puede importar durante la recogida de páginas sin conectarse.
+3. `vercel.json` solo ejecuta `npm run build`: el esquema se crea solo en el primer
+   request (`src/db/bootstrap.ts` → `ensureSchema()`), que es más fiable que hacerlo
+   en el build, donde las variables de entorno aún no están disponibles.
+
+### Si el deploy da 404 NOT_FOUND
+
+Significa que el build no llegó a generar la salida. Mira el log de "Collecting page
+data": si aparece `DATABASE_URL is required`, repite el paso 2 y vuelve a desplegar.
+También puedes ejecutar `npm run db:init` desde tu máquina apuntando a la base de
+producción (`DATABASE_URL=... npm run db:init`).

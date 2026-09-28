@@ -4,6 +4,7 @@ import { db } from "@/db";
 import { scripts } from "@/db/schema";
 import { getCurrentUser } from "@/lib/session";
 import { renderUserScript } from "@/lib/scripts";
+import { sha256 } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 
@@ -39,24 +40,28 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
 
   if (!script) return NextResponse.json({ error: "No encontrado" }, { status: 404 });
 
-  const obfuscated =
+  const wantsObfuscated =
     req.nextUrl.searchParams.get("obfuscate") === "1" || script.obfuscateByDefault;
-  const installUrl = `${req.nextUrl.origin}/api/scripts/${script.id}/download`;
 
+  const origin = req.nextUrl.origin;
+  const installUrl = `${origin}/api/scripts/${script.id}/download`;
   const output = renderUserScript(
     {
       ...script,
       updateUrl: script.updateUrl || installUrl,
       downloadUrl: script.downloadUrl || installUrl,
     },
-    obfuscated,
+    wantsObfuscated,
   );
 
   return new NextResponse(output, {
     status: 200,
     headers: {
       "content-type": "text/javascript; charset=utf-8",
-      "content-disposition": `attachment; filename="${slugify(script.name)}-${script.version}.user.js"`,
+      "content-disposition": `attachment; filename="${slugify(script.name)}-${
+        script.version
+      }.user.js"`,
+      "x-script-hash": sha256(output).slice(0, 16),
       "cache-control": "no-store",
     },
   });

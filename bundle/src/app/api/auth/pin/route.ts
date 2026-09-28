@@ -12,16 +12,17 @@ const MAX_ATTEMPTS = 3;
 const LOCK_MINUTES = 5;
 const PASSWORD_WINDOW_MINUTES = 10;
 
+type PinBody = {
+  pin?: unknown;
+  requirePassword?: unknown;
+  password?: unknown;
+};
+
 export async function POST(req: NextRequest) {
   try {
     await ensureSeed();
 
-    const body = (await req.json().catch(() => ({}))) as {
-      pin?: unknown;
-      requirePassword?: unknown;
-      password?: unknown;
-    };
-
+    const body = (await req.json().catch(() => ({}))) as PinBody;
     const pin = body.pin;
     const requirePassword = body.requirePassword === true;
     const password = typeof body.password === "string" ? body.password : "";
@@ -37,7 +38,10 @@ export async function POST(req: NextRequest) {
 
     const user = (await db.select().from(users).limit(1))[0];
     if (!user || !user.pinHash) {
-      return NextResponse.json({ error: "No hay PIN configurado" }, { status: 400 });
+      return NextResponse.json(
+        { error: "No hay PIN configurado en la base de datos" },
+        { status: 400 },
+      );
     }
 
     const blockRecord = (
@@ -68,10 +72,14 @@ export async function POST(req: NextRequest) {
     if (blockRecord?.passwordRequiredAt && blockRecord.passwordRequiredAt > now) {
       if (!requirePassword) {
         return NextResponse.json(
-          { error: "Se requiere contrasena despues del bloqueo", requiresPassword: true },
+          {
+            error: "Se requiere contrasena despues del bloqueo",
+            requiresPassword: true,
+          },
           { status: 429 },
         );
       }
+
       if (!password) {
         return NextResponse.json({ error: "Contrasena requerida" }, { status: 400 });
       }
@@ -102,7 +110,9 @@ export async function POST(req: NextRequest) {
           .update(pinAttempts)
           .set({
             attempts,
-            lockedUntil: shouldLock ? new Date(now.getTime() + LOCK_MINUTES * 60_000) : null,
+            lockedUntil: shouldLock
+              ? new Date(now.getTime() + LOCK_MINUTES * 60_000)
+              : null,
             passwordRequiredAt: shouldLock
               ? new Date(now.getTime() + PASSWORD_WINDOW_MINUTES * 60_000)
               : null,
@@ -113,7 +123,9 @@ export async function POST(req: NextRequest) {
           userId: user.id,
           ip,
           attempts,
-          lockedUntil: shouldLock ? new Date(now.getTime() + LOCK_MINUTES * 60_000) : null,
+          lockedUntil: shouldLock
+            ? new Date(now.getTime() + LOCK_MINUTES * 60_000)
+            : null,
           passwordRequiredAt: shouldLock
             ? new Date(now.getTime() + PASSWORD_WINDOW_MINUTES * 60_000)
             : null,

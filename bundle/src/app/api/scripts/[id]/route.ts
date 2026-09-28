@@ -3,13 +3,17 @@ import { and, eq } from "drizzle-orm";
 import { db } from "@/db";
 import { scripts } from "@/db/schema";
 import { getCurrentUser } from "@/lib/session";
-import { fetchRemoteCode, normalizeScriptInput, scriptHash } from "@/lib/scripts";
+import {
+  fetchRemoteCode,
+  normalizeScriptInput,
+  scriptHash,
+} from "@/lib/scripts";
 
 export const dynamic = "force-dynamic";
 
 type Ctx = { params: Promise<{ id: string }> };
 
-async function load(userId: number, rawId: string) {
+async function loadScript(userId: number, rawId: string) {
   const id = Number.parseInt(rawId, 10);
   if (!Number.isFinite(id)) return null;
   const row = (
@@ -27,8 +31,9 @@ export async function GET(_req: NextRequest, ctx: Ctx) {
   if (!user) return NextResponse.json({ error: "No autenticado" }, { status: 401 });
 
   const { id } = await ctx.params;
-  const script = await load(user.id, id);
+  const script = await loadScript(user.id, id);
   if (!script) return NextResponse.json({ error: "No encontrado" }, { status: 404 });
+
   return NextResponse.json({ script });
 }
 
@@ -38,24 +43,33 @@ export async function PATCH(req: NextRequest, ctx: Ctx) {
     if (!user) return NextResponse.json({ error: "No autenticado" }, { status: 401 });
 
     const { id } = await ctx.params;
-    const script = await load(user.id, id);
+    const script = await loadScript(user.id, id);
     if (!script) return NextResponse.json({ error: "No encontrado" }, { status: 404 });
 
-    const body = (await req.json().catch(() => ({}))) as Record<string, unknown>;
+    const body = await req.json().catch(() => ({}));
     const input = normalizeScriptInput({ ...script, ...body });
 
     let code = input.code;
-    if (body.refetchFromSource === true && input.sourceUrl) {
+    const refetch = body.refetchFromSource === true;
+    if (refetch && input.sourceUrl) {
       const remote = await fetchRemoteCode(input.sourceUrl);
       if (!remote.ok) {
-        return NextResponse.json({ error: remote.error }, { status: 400 });
+        return NextResponse.json(
+          { error: `No se pudo reimportar: ${remote.error}` },
+          { status: 400 },
+        );
       }
       code = remote.code;
     }
 
     const updated = await db
       .update(scripts)
-      .set({ ...input, code, codeHash: scriptHash(code), updatedAt: new Date() })
+      .set({
+        ...input,
+        code,
+        codeHash: scriptHash(code),
+        updatedAt: new Date(),
+      })
       .where(eq(scripts.id, script.id))
       .returning();
 
@@ -71,7 +85,7 @@ export async function DELETE(_req: NextRequest, ctx: Ctx) {
   if (!user) return NextResponse.json({ error: "No autenticado" }, { status: 401 });
 
   const { id } = await ctx.params;
-  const script = await load(user.id, id);
+  const script = await loadScript(user.id, id);
   if (!script) return NextResponse.json({ error: "No encontrado" }, { status: 404 });
 
   await db.delete(scripts).where(eq(scripts.id, script.id));

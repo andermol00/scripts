@@ -3,13 +3,20 @@ import { desc, eq } from "drizzle-orm";
 import { db } from "@/db";
 import { scripts } from "@/db/schema";
 import { getCurrentUser } from "@/lib/session";
-import { fetchRemoteCode, normalizeScriptInput, publicScript, scriptHash } from "@/lib/scripts";
+import {
+  fetchRemoteCode,
+  normalizeScriptInput,
+  publicScript,
+  scriptHash,
+} from "@/lib/scripts";
 
 export const dynamic = "force-dynamic";
 
 export async function GET() {
   const user = await getCurrentUser();
-  if (!user) return NextResponse.json({ error: "No autenticado" }, { status: 401 });
+  if (!user) {
+    return NextResponse.json({ error: "No autenticado" }, { status: 401 });
+  }
 
   const rows = await db
     .select()
@@ -23,10 +30,12 @@ export async function GET() {
 export async function POST(req: NextRequest) {
   try {
     const user = await getCurrentUser();
-    if (!user) return NextResponse.json({ error: "No autenticado" }, { status: 401 });
+    if (!user) {
+      return NextResponse.json({ error: "No autenticado" }, { status: 401 });
+    }
 
     const body = await req.json().catch(() => ({}));
-    const input = normalizeScriptInput(body as Record<string, unknown>);
+    const input = normalizeScriptInput(body);
 
     if (!input.name.trim()) {
       return NextResponse.json({ error: "El nombre es obligatorio" }, { status: 400 });
@@ -46,10 +55,18 @@ export async function POST(req: NextRequest) {
 
     const inserted = await db
       .insert(scripts)
-      .values({ ...input, userId: user.id, code, codeHash: scriptHash(code) })
+      .values({
+        ...input,
+        userId: user.id,
+        code,
+        codeHash: scriptHash(code),
+      })
       .returning();
 
-    return NextResponse.json({ script: publicScript(inserted[0]) }, { status: 201 });
+    return NextResponse.json(
+      { script: publicScript(inserted[0]) },
+      { status: 201 },
+    );
   } catch (error) {
     console.error("[scripts POST]", error);
     return NextResponse.json({ error: "No se pudo crear el script" }, { status: 500 });

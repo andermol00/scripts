@@ -21,6 +21,12 @@ export default async function LoginPage() {
             recuperacion <code className="text-emerald-400">{DEFAULT_PASSWORD}</code>
           </p>
           <p className="mt-1">Cambialos desde el panel, en Credenciales.</p>
+          <a
+            href="/descargar"
+            className="mt-3 inline-block font-semibold text-emerald-400 underline hover:text-emerald-300"
+          >
+            Descargar los archivos del repo →
+          </a>
         </div>
       </div>
     </main>

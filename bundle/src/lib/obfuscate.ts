@@ -1,16 +1,21 @@
-/** Ofuscacion ligera sin dependencias: empaqueta el codigo en base64 ofuscado. */
-export function obfuscateScript(code: string, header = ""): string {
+/**
+ * Ofuscación ligera y sin dependencias para userscripts.
+ * Empaqueta el código original en un array de caracteres ofuscado y lo
+ * reconstruye en tiempo de ejecución dentro de un IIFE.
+ */
+export function obfuscateScript(code: string, banner = ""): string {
   const payload = Buffer.from(code, "utf8").toString("base64");
   const chunks = payload.match(/.{1,96}/g) ?? [];
   const pieces = chunks.map((chunk) => `"${chunk}"`).join(",\n  ");
 
-  return `${header}
+  return `${banner}// ==/UserScript==
 /* Ofuscado por Tampervault */
 (function () {
   "use strict";
   var parts = [
   ${pieces}
   ];
+  var encoded = parts.join("");
   function decode(b64) {
     var chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
     var clean = b64.replace(/[^A-Za-z0-9+/=]/g, "");
@@ -29,7 +34,9 @@ export function obfuscateScript(code: string, header = ""): string {
     }
     return decodeURIComponent(escape(out));
   }
-  new Function(decode(parts.join("")))();
+  var source = decode(encoded);
+  var boot = new Function(source + "\\n//# sourceURL=tampervault.user.js");
+  boot();
 })();
 `;
 }
@@ -48,7 +55,7 @@ export function buildUserscriptHeader(script: {
 }): string {
   const lines: string[] = ["// ==UserScript=="];
   const push = (key: string, value: string) => {
-    if (value.trim()) lines.push(`// @${key}          ${value.trim()}`);
+    if (value && value.trim().length > 0) lines.push(`// @${key}          ${value.trim()}`);
   };
 
   push("name", script.name);
@@ -56,8 +63,16 @@ export function buildUserscriptHeader(script: {
   push("version", script.version);
   push("description", script.description);
   push("author", script.author);
-  for (const match of script.matches) if (match.trim()) lines.push(`// @match         ${match.trim()}`);
-  for (const grant of script.grants) if (grant.trim()) lines.push(`// @grant         ${grant.trim()}`);
+
+  for (const pattern of script.matches) {
+    const trimmed = pattern.trim();
+    if (trimmed) lines.push(`// @match         ${trimmed}`);
+  }
+  for (const grant of script.grants) {
+    const trimmed = grant.trim();
+    if (trimmed) lines.push(`// @grant         ${trimmed}`);
+  }
+
   lines.push(`// @run-at        ${script.runAt}`);
   if (script.updateUrl.trim()) lines.push(`// @updateURL     ${script.updateUrl.trim()}`);
   if (script.downloadUrl.trim()) lines.push(`// @downloadURL   ${script.downloadUrl.trim()}`);
