@@ -1,0 +1,53 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+model Admin {
+  id         String    @id @default(uuid())
+  username   String    @unique
+  totpSecret String
+  isSetup    Boolean   @default(false)
+  createdAt  DateTime  @default(now())
+  sessions   Session[]
+}
+
+model Session {
+  id        String   @id @default(uuid())
+  token     String   @unique
+  adminId   String
+  admin     Admin    @relation(fields: [adminId], references: [id])
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+}
+
+model Script {
+  id               String     @id @default(uuid())
+  name             String
+  description      String?
+  rawScript        String     @db.Text
+  obfuscatedScript String     @db.Text
+  metadata         Json
+  accessToken      String     @unique @default(uuid())
+  version          Int        @default(1)
+  isActive         Boolean    @default(true)
+  obfuscationLevel String     @default("high")
+  createdAt        DateTime   @default(now())
+  updatedAt        DateTime   @updatedAt
+  checkLogs        CheckLog[]
+}
+
+model CheckLog {
+  id        String   @id @default(uuid())
+  scriptId  String
+  script    Script   @relation(fields: [scriptId], references: [id])
+  action    String
+  ip        String?
+  userAgent String?
+  createdAt DateTime @default(now())
+}
