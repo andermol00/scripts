@@ -2,12 +2,12 @@ import JavaScriptObfuscator from 'javascript-obfuscator'
 
 export type ObfuscationLevel = 'low' | 'medium' | 'high' | 'maximum'
 
-function getObfuscationConfig(level: ObfuscationLevel) {
+function getObfuscationConfig(level: ObfuscationLevel): any {
   switch (level) {
     case 'low':
       return {
         compact: true,
-        identifierNamesGenerator: 'hexadecimal' as const,
+        identifierNamesGenerator: 'hexadecimal',
         rotateStringArray: true,
         shuffleStringArray: true,
         stringArray: true,
@@ -20,14 +20,14 @@ function getObfuscationConfig(level: ObfuscationLevel) {
     case 'medium':
       return {
         compact: true,
-        identifierNamesGenerator: 'hexadecimal' as const,
+        identifierNamesGenerator: 'hexadecimal',
         renameGlobals: true,
         rotateStringArray: true,
         shuffleStringArray: true,
         splitStrings: true,
         splitStringsChunkLength: 10,
         stringArray: true,
-        stringArrayEncoding: ['base64'] as const,
+        stringArrayEncoding: ['base64'],
         stringArrayThreshold: 0.75,
         unicodeEscapeSequence: true,
         controlFlowFlattening: true,
@@ -40,14 +40,14 @@ function getObfuscationConfig(level: ObfuscationLevel) {
     case 'high':
       return {
         compact: true,
-        identifierNamesGenerator: 'hexadecimal' as const,
+        identifierNamesGenerator: 'hexadecimal',
         renameGlobals: true,
         rotateStringArray: true,
         shuffleStringArray: true,
         splitStrings: true,
         splitStringsChunkLength: 5,
         stringArray: true,
-        stringArrayEncoding: ['rc4'] as const,
+        stringArrayEncoding: ['rc4'],
         stringArrayThreshold: 0.85,
         unicodeEscapeSequence: true,
         controlFlowFlattening: true,
@@ -65,14 +65,14 @@ function getObfuscationConfig(level: ObfuscationLevel) {
       return {
         compact: true,
         selfDefending: true,
-        identifierNamesGenerator: 'mangled-shuffled' as const,
+        identifierNamesGenerator: 'mangled-shuffled',
         renameGlobals: true,
         rotateStringArray: true,
         shuffleStringArray: true,
         splitStrings: true,
         splitStringsChunkLength: 3,
         stringArray: true,
-        stringArrayEncoding: ['rc4'] as const,
+        stringArrayEncoding: ['rc4'],
         stringArrayThreshold: 1,
         unicodeEscapeSequence: true,
         controlFlowFlattening: true,
@@ -88,7 +88,7 @@ function getObfuscationConfig(level: ObfuscationLevel) {
         stringArrayWrappersCount: 5,
         stringArrayWrappersChainedCalls: true,
         stringArrayWrappersParametersMaxCount: 5,
-        stringArrayWrappersType: 'function' as const,
+        stringArrayWrappersType: 'function',
       }
   }
 }
