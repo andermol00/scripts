@@ -241,7 +241,7 @@ function buildMetadataBlock(
     : metadata['grant'] ? [metadata['grant']] : []
 
   const requiredGrants = ['GM_xmlhttpRequest','GM_notification','GM_openInTab']
-  const allGrants = [...new Set([...existingGrants, ...requiredGrants])]
+const allGrants = existingGrants.concat(requiredGrants).filter((v, i, a) => a.indexOf(v) === i)
   
   // Escribir grants combinados (sin duplicados)
   allGrants.forEach(g => { block += add('grant', g) })
