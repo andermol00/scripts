@@ -16,24 +16,24 @@ export function generateTamperMonkeyScript(options: ScriptGeneratorOptions): {
 } {
   const { scriptId, accessToken, version, rawScript, obfuscationLevel, appUrl } = options
 
-  const metadata = parseMetadata(rawScript)
-  const scriptBody = extractScriptBody(rawScript)
+  var metadata = parseMetadata(rawScript)
+  var scriptBody = extractScriptBody(rawScript)
 
-  const codeToObfuscate = buildScriptBody(scriptBody, {
+  var codeToObfuscate = buildScriptBody(scriptBody, {
     scriptId,
     accessToken,
     version,
     appUrl,
   })
 
-  const obfuscatedCode = obfuscateScript(codeToObfuscate, { level: obfuscationLevel })
-  const metadataBlock = buildMetadataBlock(metadata, version, appUrl, scriptId)
-  const finalScript = `${metadataBlock}\n\n${obfuscatedCode}`
+  var obfuscatedCode = obfuscateScript(codeToObfuscate, { level: obfuscationLevel })
+  var metadataBlock = buildMetadataBlock(metadata, version, appUrl, scriptId)
+  var finalScript = metadataBlock + '\n\n' + obfuscatedCode
 
   return {
     obfuscatedScript: obfuscatedCode,
-    metadata,
-    finalScript,
+    metadata: metadata,
+    finalScript: finalScript,
   }
 }
 
@@ -41,139 +41,139 @@ function buildScriptBody(
   originalBody: string,
   config: { scriptId: string; accessToken: string; version: number; appUrl: string }
 ): string {
-  const { accessToken, version, appUrl, scriptId } = config
-  const checkUrl = `${appUrl}/api/check-update/${accessToken}`
+  var accessToken = config.accessToken
+  var version = config.version
+  var appUrl = config.appUrl
+  var scriptId = config.scriptId
+  var checkUrl = appUrl + '/api/check-update/' + accessToken
 
-  return `
-(function () {
-  'use strict';
-
-  var SCRIPT_ID      = "${scriptId}";
-  var ACCESS_TOKEN   = "${accessToken}";
-  var CURRENT_VER    = ${version};
-  var CHECK_URL      = "${checkUrl}";
-  var SERVE_URL      = "${appUrl}/api/scripts/${scriptId}/serve";
-
-  var _notifKey   = '_sa_update_' + SCRIPT_ID;
-  var _notified  = false;
-
-  try {
-    _notified = sessionStorage.getItem(_notifKey) === 'yes';
-  } catch (_e) {}
-
-  function reportAlive() {
-    try {
-      GM_xmlhttpRequest({
-        method : 'POST',
-        url    : CHECK_URL + '/ping',
-        headers: { 
-          'Content-Type'   : 'application/json', 
-          'X-Script-Token' : ACCESS_TOKEN 
-        },
-        data   : JSON.stringify({
-          version   : CURRENT_VER,
-          url       : window.location.hostname,
-          timestamp : Date.now()
-        }),
-        onerror  : function () {},
-        ontimeout: function () {},
-      });
-    } catch (_e) {}
-  }
-
-  function checkVersion() {
-    if (_notified) return;
-
-    try {
-      GM_xmlhttpRequest({
-        method : 'GET',
-        url    : CHECK_URL + '?v=' + CURRENT_VER + '&t=' + Date.now(),
-        headers: { 'X-Script-Token': ACCESS_TOKEN },
-        timeout: 15000,
-        onload: function (response) {
-          try {
-            var data = JSON.parse(response.responseText);
-
-            if (data && data.active === false) {
-              console.warn('[Admin] Script disabled by administrator.');
-              return;
-            }
-
-            if (data && data.hasUpdate && !_notified) {
-              _notified = true;
-              
-              try { sessionStorage.setItem(_notifKey, 'yes'); } catch (_e2) {}
-
-              showUpdateNotification(data.version);
-            }
-          } catch (_e3) {}
-        },
-        onerror  : function () {},
-        ontimeout: function () {},
-      });
-    } catch (_e4) {}
-  }
-
-  function showUpdateNotification(newVersion) {
-    console.log(
-      '%c[Admin] %cUpdate available! %cv' + CURRENT_VER + ' -> v' + newVersion,
-      'color:#7c3aed;font-weight:bold;',
-      'color:#10b981;font-weight:bold;',
-      'color:#f59e0b;font-weight:bold;'
-    );
-    console.log('Install: ' + SERVE_URL);
-
-    if (typeof GM_notification === 'function') {
-      GM_notification({
-        title  : 'New Version Available',
-        text   : 'v' + newVersion + ' ready. Click to install.',
-        timeout: 0,
-        onclick: openInstallPage
-      });
-    }
-  }
-
-  function openInstallPage() {
-    if (typeof GM_openInTab === 'function') {
-      GM_openInTab(SERVE_URL, { active: true });
-    } else {
-      window.open(SERVE_URL, '_blank');
-    }
-  }
-
-  function checkActive(callback) {
-    try {
-      GM_xmlhttpRequest({
-        method : 'GET',
-        url    : CHECK_URL + '?v=' + CURRENT_VER,
-        headers: { 'X-Script-Token': ACCESS_TOKEN },
-        timeout: 10000,
-        onload: function (response) {
-          try {
-            var data = JSON.parse(response.responseText);
-            if (data && data.active === false) {
-              console.warn('[Admin] Script deactivated.');
-              return;
-            }
-            callback();
-          } catch (_e5) { callback(); }
-        },
-        onerror  : function () { callback(); },
-        ontimeout: function () { callback(); },
-      });
-    } catch (_e6) { callback(); }
-  }
-
-  checkActive(function () {
-    reportAlive();
-    checkVersion();
-    setInterval(checkVersion, 600000);
-    setInterval(reportAlive, 900000);
-    ${originalBody}
-  });
-
-})();
-`.trim()
+  return '(function () {\n' +
+    '  \'use strict\';\n' +
+    '\n' +
+    '  var SCRIPT_ID      = "' + scriptId + '";\n' +
+    '  var ACCESS_TOKEN   = "' + accessToken + '";\n' +
+    '  var CURRENT_VER    = ' + version + ';\n' +
+    '  var CHECK_URL      = "' + checkUrl + '";\n' +
+    '  var SERVE_URL      = "' + appUrl + '/api/scripts/' + scriptId + '/serve";\n' +
+    '\n' +
+    '  var _notifKey   = "_sa_update_" + SCRIPT_ID;\n' +
+    '  var _notified  = false;\n' +
+    '\n' +
+    '  try {\n' +
+    '    _notified = sessionStorage.getItem(_notifKey) === "yes";\n' +
+    '  } catch (_e) {}\n' +
+    '\n' +
+    '  function reportAlive() {\n' +
+    '    try {\n' +
+    '      GM_xmlhttpRequest({\n' +
+    '        method : "POST",\n' +
+    '        url    : CHECK_URL + "/ping",\n' +
+    '        headers: {\n' +
+    '          "Content-Type"   : "application/json",\n' +
+    '          "X-Script-Token" : ACCESS_TOKEN\n' +
+    '        },\n' +
+    '        data   : JSON.stringify({\n' +
+    '          version   : CURRENT_VER,\n' +
+    '          url       : window.location.hostname,\n' +
+    '          timestamp : Date.now()\n' +
+    '        }),\n' +
+    '        onerror  : function () {},\n' +
+    '        ontimeout: function () {},\n' +
+    '      });\n' +
+    '    } catch (_e) {}\n' +
+    '  }\n' +
+    '\n' +
+    '  function checkVersion() {\n' +
+    '    if (_notified) return;\n' +
+    '\n' +
+    '    try {\n' +
+    '      GM_xmlhttpRequest({\n' +
+    '        method : "GET",\n' +
+    '        url    : CHECK_URL + "?v=" + CURRENT_VER + "&t=" + Date.now(),\n' +
+    '        headers: { "X-Script-Token": ACCESS_TOKEN },\n' +
+    '        timeout: 15000,\n' +
+    '        onload: function (response) {\n' +
+    '          try {\n' +
+    '            var data = JSON.parse(response.responseText);\n' +
+    '\n' +
+    '            if (data && data.active === false) {\n' +
+    '              console.warn("[Admin] Script disabled by administrator.");\n' +
+    '              return;\n' +
+    '            }\n' +
+    '\n' +
+    '            if (data && data.hasUpdate && !_notified) {\n' +
+    '              _notified = true;\n' +
+    '              try { sessionStorage.setItem(_notifKey, "yes"); } catch (_e2) {}\n' +
+    '              showUpdateNotification(data.version);\n' +
+    '            }\n' +
+    '          } catch (_e3) {}\n' +
+    '        },\n' +
+    '        onerror  : function () {},\n' +
+    '        ontimeout: function () {},\n' +
+    '      });\n' +
+    '    } catch (_e4) {}\n' +
+    '  }\n' +
+    '\n' +
+    '  function showUpdateNotification(newVersion) {\n' +
+    '    console.log(\n' +
+    '      "%c[Admin] %cUpdate available! %cv" + CURRENT_VER + " -> v" + newVersion,\n' +
+    '      "color:#7c3aed;font-weight:bold;",\n' +
+    '      "color:#10b981;font-weight:bold;",\n' +
+    '      "color:#f59e0b;font-weight:bold;"\n' +
+    '    );\n' +
+    '    console.log("Install: " + SERVE_URL);\n' +
+    '\n' +
+    '    if (typeof GM_notification === "function") {\n' +
+    '      GM_notification({\n' +
+    '        title  : "New Version Available",\n' +
+    '        text   : "v" + newVersion + " ready. Click to install.",\n' +
+    '        timeout: 0,\n' +
+    '        onclick: openInstallPage\n' +
+    '      });\n' +
+    '    }\n' +
+    '  }\n' +
+    '\n' +
+    '  function openInstallPage() {\n' +
+    '    if (typeof GM_openInTab === "function") {\n' +
+    '      GM_openInTab(SERVE_URL, { active: true });\n' +
+    '    } else {\n' +
+    '      window.open(SERVE_URL, "_blank");\n' +
+    '    }\n' +
+    '  }\n' +
+    '\n' +
+    '  function checkActive(callback) {\n' +
+    '    try {\n' +
+    '      GM_xmlhttpRequest({\n' +
+    '        method : "GET",\n' +
+    '        url    : CHECK_URL + "?v=" + CURRENT_VER,\n' +
+    '        headers: { "X-Script-Token": ACCESS_TOKEN },\n' +
+    '        timeout: 10000,\n' +
+    '        onload: function (response) {\n' +
+    '          try {\n' +
+    '            var data = JSON.parse(response.responseText);\n' +
+    '            if (data && data.active === false) {\n' +
+    '              console.warn("[Admin] Script deactivated.");\n' +
+    '              return;\n' +
+    '            }\n' +
+    '            callback();\n' +
+    '          } catch (_e5) { callback(); }\n' +
+    '        },\n' +
+    '        onerror  : function () { callback(); },\n' +
+    '        ontimeout: function () { callback(); },\n' +
+    '      });\n' +
+    '    } catch (_e6) { callback(); }\n' +
+    '  }\n' +
+    '\n' +
+    '  checkActive(function () {\n' +
+    '    reportAlive();\n' +
+    '    checkVersion();\n' +
+    '    setInterval(checkVersion, 600000);\n' +
+    '    setInterval(reportAlive, 900000);\n' +
+    originalBody +
+    '\n' +
+    '  });\n' +
+    '\n' +
+    '})();'
 }
 
 function buildMetadataBlock(
@@ -183,12 +183,13 @@ function buildMetadataBlock(
   scriptId: string
 ): string {
 
-  const add = (key: string, value: string) =>
-    `// @${key.padEnd(16)} ${value}\n`
+  function add(key: string, value: string): string {
+    return '// @' + key.padEnd(16) + value + '\n'
+  }
 
-  let block = '// ==UserScript==\n'
+  var block = '// ==UserScript==\n'
 
-  const standardKeys = [
+  var standardKeys = [
     'name', 'namespace', 'version', 'description', 'author',
     'match', 'include', 'exclude', 'matchAboutBlank',
     'run-at', 'grant', 'require', 'icon',
@@ -196,67 +197,119 @@ function buildMetadataBlock(
     'resource', 'connect', 'noframes'
   ]
 
-  for (const key of standardKeys) {
-    const val = metadata[key]
+  var i: number
+  var key: string
+
+  for (i = 0; i < standardKeys.length; i++) {
+    key = standardKeys[i]
+    var val = metadata[key]
     if (!val) continue
     
     if (Array.isArray(val)) {
-      val.forEach(v => { block += add(key, v) })
+      for (var j = 0; j < val.length; j++) {
+        block += add(key, val[j])
+      }
     } else {
       block += add(key, val as string)
     }
   }
 
-  for (const [key, val] of Object.entries(metadata)) {
-    if (standardKeys.includes(key)) continue
+  var metaKeys = Object.keys(metadata)
+  for (i = 0; i < metaKeys.length; i++) {
+    key = metaKeys[i]
+    if (standardKeys.indexOf(key) !== -1) continue
     
-    if (Array.isArray(val)) {
-      val.forEach(v => { block += add(key, v) })
-    } else {
-      block += add(key, val as string)
+    var val2 = metadata[key]
+    
+    if (Array.isArray(val2)) {
+      for (var k = 0; k < val2.length; k++) {
+        block += add(key, val2[k])
+      }
+    } else if (typeof val2 === 'string') {
+      block += add(key, val2)
     }
   }
 
-  const hasNoframes = Array.isArray(metadata['noframes'])
-    ? true
-    : typeof metadata['noframes'] === 'string'
-    
+  // @noframes
+  var hasNoframes = Array.isArray(metadata['noframes']) || typeof metadata['noframes'] === 'string'
   if (!hasNoframes) {
     block += add('noframes', '')
   }
 
+  // version
   if (!metadata['version']) {
     block += add('version', String(version))
   }
 
-  const hasCustomUpdate = Array.isArray(metadata['updateurl'] || metadata['updateURL'])
-    ? (metadata['updateurl'] || metadata['updateURL'] as string[]).some(u => u.includes(appUrl))
-    : String(metadata['updateurl'] || metadata['updateURL'] || '').includes(appUrl)
-
-  if (!hasCustomUpdate) {
-    block += add('updateURL', `${appUrl}/api/scripts/${scriptId}/serve`)
-    block += add('downloadURL', `${appUrl}/api/scripts/${scriptId}/serve`)
+  // update URLs - SIN .some(), usando loop normal para evitar error de tipo
+  var rawUpdateUrl: any = metadata['updateurl'] || metadata['updateURL']
+  var arrUpdateUrl: string[]
+  
+  if (Array.isArray(rawUpdateUrl)) {
+    arrUpdateUrl = rawUpdateUrl
+  } else if (typeof rawUpdateUrl === 'string' && rawUpdateUrl.length > 0) {
+    arrUpdateUrl = [rawUpdateUrl]
+  } else {
+    arrUpdateUrl = ['']
+  }
+  
+  var hasCustomUpdate = false
+  for (var m = 0; m < arrUpdateUrl.length; m++) {
+    if (arrUpdateUrl[m].indexOf(appUrl) !== -1) {
+      hasCustomUpdate = true
+      break
+    }
   }
 
-  const existingGrants = Array.isArray(metadata['grant'])
-    ? [...metadata['grant']]
-    : (metadata['grant'] ? [metadata['grant']] : [])
+  if (!hasCustomUpdate) {
+    block += add('updateURL', appUrl + '/api/scripts/' + scriptId + '/serve')
+    block += add('downloadURL', appUrl + '/api/scripts/' + scriptId + '/serve')
+  }
 
-  const requiredGrants = ['GM_xmlhttpRequest', 'GM_notification', 'GM_openInTab']
+  // grants
+  var existingGrants: string[] = []
+  var rawGrants = metadata['grant']
   
-  const allGrants = existingGrants.concat(requiredGrants).filter(function(item, pos, self) {
-    return self.indexOf(item) === pos;
-  })
+  if (Array.isArray(rawGrants)) {
+    existingGrants = rawGrants.slice()
+  } else if (typeof rawGrants === 'string') {
+    existingGrants = [rawGrants]
+  }
 
-  allGrants.forEach(g => { block += add('grant', g) })
+  var requiredGrants = ['GM_xmlhttpRequest', 'GM_notification', 'GM_openInTab']
+  var allGrants = existingGrants.concat(requiredGrants)
+  
+  // deduplicar sin usar Set ni filter (compatibilidad total)
+  var uniqueGrants: string[] = []
+  for (var n = 0; n < allGrants.length; n++) {
+    if (uniqueGrants.indexOf(allGrants[n]) === -1) {
+      uniqueGrants.push(allGrants[n])
+    }
+  }
 
+  for (var p = 0; p < uniqueGrants.length; p++) {
+    block += add('grant', uniqueGrants[p])
+  }
+
+  // connect
   try {
     var serverHost = new URL(appUrl).hostname
-    var existingConnects = Array.isArray(metadata['connect'])
-      ? metadata['connect']
-      : (metadata['connect'] ? [metadata['connect']] : [])
-      
-    var hasServerConnect = existingConnects.some(c => c.includes(serverHost))
+    var existingConnects: any = metadata['connect']
+    var connectArr: string[] = []
+    
+    if (Array.isArray(existingConnects)) {
+      connectArr = existingConnects
+    } else if (typeof existingConnects === 'string') {
+      connectArr = [existingConnects]
+    }
+    
+    var hasServerConnect = false
+    for (var c = 0; c < connectArr.length; c++) {
+      if (connectArr[c].indexOf(serverHost) !== -1) {
+        hasServerConnect = true
+        break
+      }
+    }
     
     if (!hasServerConnect) {
       block += add('connect', serverHost)
