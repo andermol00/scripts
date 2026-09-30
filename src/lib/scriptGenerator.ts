@@ -16,9 +16,11 @@ export function generateTamperMonkeyScript(options: ScriptGeneratorOptions): {
 } {
   const { scriptId, accessToken, version, rawScript, obfuscationLevel, appUrl } = options
 
-  const metadata   = parseMetadata(rawScript)
+  // CAMBIO 1: Extraer metadata ORIGINAL tal cual viene
+  const metadata = parseMetadata(rawScript)
   const scriptBody = extractScriptBody(rawScript)
 
+  // CAMBIO 4: Sistema de verificación INSTANTÁNEA
   const codeToObfuscate = buildScriptBody(scriptBody, {
     scriptId,
     accessToken,
@@ -27,12 +29,19 @@ export function generateTamperMonkeyScript(options: ScriptGeneratorOptions): {
   })
 
   const obfuscatedCode = obfuscateScript(codeToObfuscate, { level: obfuscationLevel })
-  const metadataBlock  = buildMetadataBlock(metadata, version, appUrl, scriptId)
-  const finalScript    = `${metadataBlock}\n\n${obfuscatedCode}`
+  
+  // CAMBIO 1+2: Construir header respetando original + agregar @noframes solo si no existe
+  const metadataBlock = buildMetadataBlock(metadata, version, appUrl, scriptId)
+  const finalScript = `${metadataBlock}\n\n${obfuscatedCode}`
 
-  return { obfuscatedScript: obfuscatedCode, metadata, finalScript }
+  return {
+    obfuscatedScript: obfuscatedCode,
+    metadata,
+    finalScript,
+  }
 }
 
+// CAMBIO 4: Verificación inmediata al cargar + cada 2 minutos (no 30)
 function buildScriptBody(
   originalBody: string,
   config: { scriptId: string; accessToken: string; version: number; appUrl: string }
@@ -63,6 +72,7 @@ function buildScriptBody(
     } catch (e) {}
   }
 
+  // CAMBIO 4: Verificación INMEDIATA al cargar
   function checkVersion() {
     try {
       GM_xmlhttpRequest({
@@ -79,6 +89,7 @@ function buildScriptBody(
             }
             if (data && data.hasUpdate) {
               notifyUpdate(data.version);
+              forceUpdate(data.version);
             }
           } catch (e) {}
         },
@@ -88,16 +99,36 @@ function buildScriptBody(
     } catch (e) {}
   }
 
+  // CAMBIO 4: Forzar actualización inmediata si hay nueva versión
+  function forceUpdate(newVersion) {
+    try {
+      GM_xmlhttpRequest({
+        method : 'GET',
+        url    : SERVE_URL + '?force=1',
+        headers: { 'X-Script-Token': ACCESS_TOKEN },
+        onload: function () {
+          if (typeof GM_notification === 'function') {
+            GM_notification({
+              title  : 'Updating...',
+              text   : 'Downloading version ' + newVersion,
+              timeout: 5000,
+            });
+          }
+          location.reload();
+        },
+        onerror: function () {}
+      });
+    } catch (e) {}
+  }
+
   function notifyUpdate(newVersion) {
     try {
       if (typeof GM_notification === 'function') {
         GM_notification({
-          title  : 'Script Update Available',
-          text   : 'Version ' + newVersion + ' is ready. TamperMonkey will update automatically.',
-          timeout: 8000,
-          onclick: function () {
-            if (typeof GM_openInTab === 'function') GM_openInTab(SERVE_URL, false);
-          },
+          title  : 'Update Available!',
+          text   : 'Version ' + newVersion + ' ready. Reloading...',
+          timeout: 5000,
+          onclick: function () { forceUpdate(newVersion); },
         });
       }
     } catch (e) {}
@@ -128,9 +159,12 @@ function buildScriptBody(
 
   checkActive(function () {
     reportAlive();
-    setTimeout(checkVersion, 5000);
-    setInterval(checkVersion, 30 * 60 * 1000);
-    setInterval(reportAlive, 15 * 60 * 1000);
+
+    // CAMBIO 4: Inmediato al cargar (0 segundos), luego cada 2 minutos (120000ms)
+    checkVersion();
+    
+    setInterval(checkVersion, 120000);  // Cada 2 min, no 30 min
+    setInterval(reportAlive, 300000);  // Ping cada 5 min
 
     ${originalBody}
   });
@@ -139,6 +173,8 @@ function buildScriptBody(
 `.trim()
 }
 
+// CAMBIO 1: Header respeta TODO lo que el usuario puso originalmente
+// CAMBIO 2: Solo agrega @noframes si no existe, y agrega @updateURL/@downloadURL para sistema de updates
 function buildMetadataBlock(
   metadata: Record<string, string | string[]>,
   version: number,
@@ -150,43 +186,77 @@ function buildMetadataBlock(
 
   let block = '// ==UserScript==\n'
 
-  const originalKeys = [
-    'name','namespace','description','author',
-    'match','include','exclude','run-at','icon',
-    'homepage','homepageURL',
+  // CAMBIO 1: Preservar EXACTAMENTE todo lo que el usuario escribió en orden original
+  const keysInOrder = [
+    'name', 'namespace', 'version', 'description', 'author',
+    'match', 'include', 'exclude', 'matchAboutBlank',
+    'run-at', 'grant', 'require', 'icon', 'homepage',
+    'homepageURL', 'supportURL', 'website', 'resource',
+    'connect', 'noframes'  // Mantener noframes si usuario lo puso
   ]
 
-  for (const key of originalKeys) {
+  // Primero escribir las claves conocidas en orden
+  for (const key of keysInOrder) {
     const val = metadata[key]
     if (!val) continue
     if (Array.isArray(val)) val.forEach(v => { block += add(key, v) })
     else block += add(key, val)
   }
 
-  block += add('version',     String(version))
-  block += add('updateURL',   `${appUrl}/api/scripts/${scriptId}/serve`)
-  block += add('downloadURL', `${appUrl}/api/scripts/${scriptId}/serve`)
-
-  const originalGrants = Array.isArray(metadata.grant)
-    ? metadata.grant
-    : metadata.grant ? [metadata.grant] : []
-
-  const requiredGrants = ['GM_xmlhttpRequest','GM_notification','GM_openInTab']
-  const allGrants = Array.from(new Set([...originalGrants, ...requiredGrants]))
-  allGrants.forEach(g => { block += add('grant', g) })
-
-  try {
-    const hostname = new URL(appUrl).hostname
-    block += add('connect', hostname)
-    block += add('connect', 'localhost')
-  } catch {}
-
-  const processed = new Set([...originalKeys,'version','grant','connect'])
+  // Luego escribir cualquier otra clave extra que tenga el usuario
   for (const [key, val] of Object.entries(metadata)) {
-    if (processed.has(key)) continue
+    if (keysInOrder.includes(key)) continue
     if (Array.isArray(val)) val.forEach(v => { block += add(key, v) })
     else block += add(key, val)
   }
+
+  // CAMBIO 1: NO sobrescribir la versión del usuario con la nuestra, solo usarla interna
+  // Si el usuario no puso version, agregamos una
+  if (!metadata['version']) {
+    block += add('version', String(version))
+  }
+
+  // CAMBIO 2: Agregar @noframes si el usuario no la puso
+  const hasNoframes = Array.isArray(metadata['noframes']) 
+    ? true 
+    : !!metadata['noframes']
+  
+  if (!hasNoframes) {
+    block += add('noframes', '')
+  }
+
+  // Sistema de actualización - solo si no existen ya
+  const hasUpdateUrl = Array.isArray(metadata['updateurl']) 
+    ? metadata['updateurl'].some(u => u.includes(appUrl))
+    : metadata['updateurl']?.includes(appUrl)
+
+  if (!hasUpdateUrl) {
+    block += add('updateURL', `${appUrl}/api/scripts/${scriptId}/serve`)
+    block += add('downloadURL', `${appUrl}/api/scripts/${scriptId}/serve`)
+  }
+
+  // Grants necesarios para el sistema
+  const existingGrants = Array.isArray(metadata['grant'])
+    ? metadata['grant']
+    : metadata['grant'] ? [metadata['grant']] : []
+
+  const requiredGrants = ['GM_xmlhttpRequest','GM_notification','GM_openInTab']
+  const allGrants = [...new Set([...existingGrants, ...requiredGrants])]
+  
+  // Escribir grants combinados (sin duplicados)
+  allGrants.forEach(g => { block += add('grant', g) })
+
+  // Connect al dominio del servidor
+  try {
+    const hostname = new URL(appUrl).hostname
+    const hasConnect = Array.isArray(metadata['connect'])
+      ? metadata['connect'].includes(hostname)
+      : metadata['connect']?.includes(hostname)
+    
+    if (!hasConnect) {
+      block += add('connect', hostname)
+    }
+  } catch {}
 
   block += '// ==/UserScript=='
   return block
