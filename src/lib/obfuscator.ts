@@ -14,7 +14,6 @@ function getObfuscationConfig(level: ObfuscationLevel): any {
         stringArrayThreshold: 0.5,
         controlFlowFlattening: false,
         deadCodeInjection: false,
-        debugProtection: false,
         disableConsoleOutput: false,
       }
     case 'medium':
@@ -34,7 +33,6 @@ function getObfuscationConfig(level: ObfuscationLevel): any {
         controlFlowFlatteningThreshold: 0.5,
         deadCodeInjection: true,
         deadCodeInjectionThreshold: 0.2,
-        debugProtection: false,
         disableConsoleOutput: true,
       }
     case 'high':
@@ -54,8 +52,6 @@ function getObfuscationConfig(level: ObfuscationLevel): any {
         controlFlowFlatteningThreshold: 0.75,
         deadCodeInjection: true,
         deadCodeInjectionThreshold: 0.4,
-        debugProtection: true,
-        debugProtectionInterval: 2000,
         disableConsoleOutput: true,
         numbersToExpressions: true,
         simplify: true,
@@ -79,8 +75,6 @@ function getObfuscationConfig(level: ObfuscationLevel): any {
         controlFlowFlatteningThreshold: 1,
         deadCodeInjection: true,
         deadCodeInjectionThreshold: 0.5,
-        debugProtection: true,
-        debugProtectionInterval: 1000,
         disableConsoleOutput: true,
         numbersToExpressions: true,
         simplify: true,
