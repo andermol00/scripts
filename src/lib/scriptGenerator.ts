@@ -237,9 +237,26 @@ function buildMetadataBlock(
   }
 
   // version
-  if (!metadata['version']) {
-    block += add('version', String(version))
+  var userVersion: string = ''
+  if (typeof metadata['version'] === 'string') {
+    userVersion = metadata['version']
   }
+
+  var finalVersion: string
+
+  if (userVersion.length > 0) {
+    // Combina versión del usuario + versión interna del sistema
+    // Ej: usuario "1.0" + sistema "2" → "1.0.2", siguiente edición → "1.0.3"
+    var cleanVersion = userVersion.replace(/[^0-9.]/g, '')
+    if (cleanVersion.length === 0) {
+      cleanVersion = '1.0'
+    }
+    finalVersion = cleanVersion + '.' + String(version)
+  } else {
+    finalVersion = String(version)
+  }
+
+  block += add('version', finalVersion)
 
   // update URLs - SIN .some(), usando loop normal para evitar error de tipo
   var rawUpdateUrl: any = metadata['updateurl'] || metadata['updateURL']
