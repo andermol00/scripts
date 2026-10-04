@@ -48,7 +48,7 @@ function buildScriptBody(
   var checkUrl = appUrl + '/api/check-update/' + accessToken
 
   return '(function () {\n' +
-    '  \'use strict\';\n' +
+    "  'use strict';\n" +
     '\n' +
     '  var SCRIPT_ID      = "' + scriptId + '";\n' +
     '  var ACCESS_TOKEN   = "' + accessToken + '";\n' +
@@ -200,11 +200,14 @@ function buildMetadataBlock(
   var i: number
   var key: string
 
+  // ─── 1. Escribir metadata original del usuario (excepto version) ──────
   for (i = 0; i < standardKeys.length; i++) {
     key = standardKeys[i]
+    if (key === 'version') continue   // La version se maneja aparte más abajo
+
     var val = metadata[key]
     if (!val) continue
-    
+
     if (Array.isArray(val)) {
       for (var j = 0; j < val.length; j++) {
         block += add(key, val[j])
@@ -214,13 +217,14 @@ function buildMetadataBlock(
     }
   }
 
+  // ─── 2. Escribir claves extra que el usuario haya puesto ──────────────
   var metaKeys = Object.keys(metadata)
   for (i = 0; i < metaKeys.length; i++) {
     key = metaKeys[i]
     if (standardKeys.indexOf(key) !== -1) continue
-    
+
     var val2 = metadata[key]
-    
+
     if (Array.isArray(val2)) {
       for (var k = 0; k < val2.length; k++) {
         block += add(key, val2[k])
@@ -230,27 +234,25 @@ function buildMetadataBlock(
     }
   }
 
-  // @noframes
+  // ─── 3. @noframes si el usuario no la puso ────────────────────────────
   var hasNoframes = Array.isArray(metadata['noframes']) || typeof metadata['noframes'] === 'string'
   if (!hasNoframes) {
     block += add('noframes', '')
   }
 
-  // version
+  // ─── 4. VERSION: SIEMPRE incrementa para que TamperMonkey actualice ───
   var userVersion: string = ''
   if (typeof metadata['version'] === 'string') {
     userVersion = metadata['version']
   }
 
   var finalVersion: string
-
   if (userVersion.length > 0) {
-    // Combina versión del usuario + versión interna del sistema
-    // Ej: usuario "1.0" + sistema "2" → "1.0.2", siguiente edición → "1.0.3"
     var cleanVersion = userVersion.replace(/[^0-9.]/g, '')
     if (cleanVersion.length === 0) {
       cleanVersion = '1.0'
     }
+    // Ej: usuario "1.0" + sistema v2 → "1.0.2" (sube en cada edición)
     finalVersion = cleanVersion + '.' + String(version)
   } else {
     finalVersion = String(version)
@@ -258,10 +260,10 @@ function buildMetadataBlock(
 
   block += add('version', finalVersion)
 
-  // update URLs - SIN .some(), usando loop normal para evitar error de tipo
+  // ─── 5. updateURL / downloadURL si no las puso manualmente ────────────
   var rawUpdateUrl: any = metadata['updateurl'] || metadata['updateURL']
   var arrUpdateUrl: string[]
-  
+
   if (Array.isArray(rawUpdateUrl)) {
     arrUpdateUrl = rawUpdateUrl
   } else if (typeof rawUpdateUrl === 'string' && rawUpdateUrl.length > 0) {
@@ -269,7 +271,7 @@ function buildMetadataBlock(
   } else {
     arrUpdateUrl = ['']
   }
-  
+
   var hasCustomUpdate = false
   for (var m = 0; m < arrUpdateUrl.length; m++) {
     if (arrUpdateUrl[m].indexOf(appUrl) !== -1) {
@@ -283,10 +285,10 @@ function buildMetadataBlock(
     block += add('downloadURL', appUrl + '/api/scripts/' + scriptId + '/serve')
   }
 
-  // grants
+  // ─── 6. Grants: originales + los necesarios ───────────────────────────
   var existingGrants: string[] = []
   var rawGrants = metadata['grant']
-  
+
   if (Array.isArray(rawGrants)) {
     existingGrants = rawGrants.slice()
   } else if (typeof rawGrants === 'string') {
@@ -295,8 +297,7 @@ function buildMetadataBlock(
 
   var requiredGrants = ['GM_xmlhttpRequest', 'GM_notification', 'GM_openInTab']
   var allGrants = existingGrants.concat(requiredGrants)
-  
-  // deduplicar sin usar Set ni filter (compatibilidad total)
+
   var uniqueGrants: string[] = []
   for (var n = 0; n < allGrants.length; n++) {
     if (uniqueGrants.indexOf(allGrants[n]) === -1) {
@@ -308,18 +309,18 @@ function buildMetadataBlock(
     block += add('grant', uniqueGrants[p])
   }
 
-  // connect
+  // ─── 7. connect al servidor ───────────────────────────────────────────
   try {
     var serverHost = new URL(appUrl).hostname
     var existingConnects: any = metadata['connect']
     var connectArr: string[] = []
-    
+
     if (Array.isArray(existingConnects)) {
       connectArr = existingConnects
     } else if (typeof existingConnects === 'string') {
       connectArr = [existingConnects]
     }
-    
+
     var hasServerConnect = false
     for (var c = 0; c < connectArr.length; c++) {
       if (connectArr[c].indexOf(serverHost) !== -1) {
@@ -327,13 +328,14 @@ function buildMetadataBlock(
         break
       }
     }
-    
+
     if (!hasServerConnect) {
       block += add('connect', serverHost)
     }
   } catch (_err) {}
 
+  // ─── FIN del bloque ───────────────────────────────────────────────────
   block += '// ==/UserScript=='
-  
+
   return block
 }
