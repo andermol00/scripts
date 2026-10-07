@@ -31,7 +31,7 @@ export default function ScriptList({ scripts, onEdit, onDelete, onToggle }: Prop
   const [viewContent, setContent] = useState('')
 
   async function copyUrl(script: Script) {
-    const url = `${window.location.origin}/api/scripts/${script.id}/serve`
+    const url = `${window.location.origin}/api/scripts/${script.id}/script.user.js`
     await navigator.clipboard.writeText(url)
     setCopied(script.id)
     toast.success('Install URL copied!')
@@ -115,7 +115,7 @@ export default function ScriptList({ scripts, onEdit, onDelete, onToggle }: Prop
 
             <div className="mt-3 flex items-center gap-2 bg-dark-800 rounded-lg p-2">
               <code className="text-xs text-purple-400 flex-1 truncate">
-                {typeof window !== 'undefined' && window.location.origin}/api/scripts/{s.id}/serve
+                {typeof window !== 'undefined' && window.location.origin}/api/scripts/{s.id}/script.user.js
               </code>
               <button onClick={() => copyUrl(s)} className="text-xs text-gray-500 hover:text-purple-400">Copy</button>
             </div>
