@@ -8,7 +8,7 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
     if (!script) {
       return new NextResponse('// Script not found\n', {
         status : 404,
-        headers: { 'Content-Type': 'application/javascript; charset=utf-8' },
+        headers: { 'Content-Type': 'text/javascript; charset=utf-8' },
       })
     }
 
@@ -24,7 +24,7 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
     if (!script.isActive) {
       return new NextResponse(
         `// ==UserScript==\n// @name         ${script.name} [DISABLED]\n// @version      ${script.version}\n// ==/UserScript==\n\n// Script disabled by administrator.\n`,
-        { status: 200, headers: { 'Content-Type': 'application/javascript; charset=utf-8', 'Cache-Control': 'no-cache' } }
+        { status: 200, headers: { 'Content-Type': 'text/javascript; charset=utf-8', 'Cache-Control': 'no-cache' } }
       )
     }
 
@@ -33,7 +33,7 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
     return new NextResponse(script.obfuscatedScript, {
       status : 200,
       headers: {
-        'Content-Type'       : 'application/javascript; charset=utf-8',
+        'Content-Type'       : 'text/javascript; charset=utf-8',
         'Content-Disposition': `attachment; filename="${fileName}.user.js"`,
         'Cache-Control'      : 'no-cache, no-store, must-revalidate',
         'X-Script-Version'   : String(script.version),
@@ -44,7 +44,7 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
     console.error(error)
     return new NextResponse('// Server error\n', {
       status : 500,
-      headers: { 'Content-Type': 'application/javascript; charset=utf-8' },
+      headers: { 'Content-Type': 'text/javascript; charset=utf-8' },
     })
   }
 }

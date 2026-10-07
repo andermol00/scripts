@@ -54,7 +54,7 @@ function buildScriptBody(
     '  var ACCESS_TOKEN   = "' + accessToken + '";\n' +
     '  var CURRENT_VER    = ' + version + ';\n' +
     '  var CHECK_URL      = "' + checkUrl + '";\n' +
-    '  var SERVE_URL      = "' + appUrl + '/api/scripts/' + scriptId + '/serve";\n' +
+    '  var SERVE_URL      = "' + appUrl + '/api/scripts/' + scriptId + '/script.user.js";\n' +
     '\n' +
     '  var _notifKey   = "_sa_update_" + SCRIPT_ID;\n' +
     '  var _notified  = false;\n' +
@@ -281,8 +281,8 @@ function buildMetadataBlock(
   }
 
   if (!hasCustomUpdate) {
-    block += add('updateURL', appUrl + '/api/scripts/' + scriptId + '/serve')
-    block += add('downloadURL', appUrl + '/api/scripts/' + scriptId + '/serve')
+    block += add('updateURL', appUrl + '/api/scripts/' + scriptId + '/script.user.js')
+    block += add('downloadURL', appUrl + '/api/scripts/' + scriptId + '/script.user.js')
   }
 
   // ─── 6. Grants: originales + los necesarios ───────────────────────────
